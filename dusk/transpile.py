@@ -1,0 +1,43 @@
+from typing import Iterator, List
+import ast
+from dusk.grammar import Grammar
+from dusk import DuskSyntaxError
+
+from dawn4py import compile, CodeGenBackend
+from dawn4py.serialization import pprint, make_sir
+from dawn4py.serialization.SIR import GridType
+
+
+__all__ = ["transpile"]
+
+
+def iter_stencils(module: ast.Module) -> Iterator[ast.AST]:
+    for stmt in module.body:
+        if isinstance(stmt, ast.FunctionDef):
+            if Grammar.is_stencil(stmt):
+                yield stmt
+
+
+def transpile(in_path: str, out_path: str) -> None:
+
+    with open(in_path, "r") as in_file:
+        in_str = in_file.read()
+        in_ast = ast.parse(in_str, filename=in_path, type_comments=True)
+
+        grammar = Grammar()
+
+        # TODO: handle errors in different stencils separately
+        stencils = [grammar.stencil(node) for node in iter_stencils(in_ast)]
+
+        sir = make_sir(in_path, GridType.Value("Unstructured"), stencils)
+
+        try:
+            pprint(sir)
+        except:
+            # TODO: remove once pretty printer is fixed for unstructured elements (e.g., loop stmt)
+            pass
+
+        out_code = compile(sir, backend=CodeGenBackend.CXXNaiveIco)
+
+        with open(out_path, "w") as out_file:
+            out_file.write(out_code)

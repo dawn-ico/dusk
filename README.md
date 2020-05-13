@@ -5,7 +5,7 @@ A minimal and lightweight front-end for dawn.
 Dusk translates a subset of Python code (a Python embedded DSL) to SIR. Its purpose is to allow quick
 prototyping of dawn's unstructured features for internal experiments.
 
-Dusk is currently in a highly experimental state.
+Dusk is currently in a highly experimental state. An example is available here: [test.py](test.py)
 
 # Requirements
 

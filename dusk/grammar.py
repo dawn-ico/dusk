@@ -20,7 +20,10 @@ from dawn4py.serialization.utils import (
     make_field_dimensions_unstructured,
     make_ast,
     make_stmt,
+    make_block_stmt,
+    make_expr_stmt,
     make_assignment_stmt,
+    make_if_stmt,
     make_vertical_region_decl_stmt,
     make_vertical_region,
     make_interval,
@@ -217,6 +220,7 @@ class Grammar:
             stmt = self.dispatch(
                 {
                     OneOf(Assign, AugAssign, AnnAssign): self.assign,
+                    If: self.if_stmt,
                     For(
                         target=_,
                         iter=Subscript(value=name(id="neighbors"), slice=_, ctx=_),
@@ -257,6 +261,21 @@ class Grammar:
             # decl_type = self.type(decl_type)
         if rhs is not None:
             return make_assignment_stmt(self.expression(lhs), self.expression(rhs))
+
+    @transform(
+        If(
+            test=Capture(expr).to("condition"),
+            body=Capture(list).to("body"),
+            orelse=Capture(list).to("orelse"),
+        )
+    )
+    def if_stmt(self, condition: expr, body: _List, orelse: _List):
+
+        condition = make_expr_stmt(self.expression(condition))
+        body = make_block_stmt(self.statements(body))
+        orelse = make_block_stmt(self.statements(orelse))
+
+        return make_if_stmt(condition, body, orelse)
 
     @transform(
         For(

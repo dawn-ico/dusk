@@ -361,9 +361,11 @@ class Grammar:
                 {
                     Constant: self.constant,
                     Name: self.var,
-                    BinOp: self.binop,
-                    UnaryOp: self.unop,
                     Subscript: self.subscript,
+                    UnaryOp: self.unop,
+                    BinOp: self.binop,
+                    BoolOp: self.boolop,
+                    Compare: self.compare,
                     # TODO: hardcoded string
                     Call(func=name("reduce"), args=_, keywords=_): self.reduction,
                 },
@@ -430,11 +432,13 @@ class Grammar:
 
     @transform(
         UnaryOp(
-            operand=Capture(expr).to("expr"), op=Capture(OneOf(UAdd, USub)).to("op")
+            operand=Capture(expr).to("expr"),
+            op=Capture(OneOf(UAdd, USub, Not)).to("op"),
         )
     )
     def unop(self, expr: expr, op):
-        py_unop_to_sir_unop = {UAdd: "+", USub: "-"}
+        # do we need `Invert`? E.g. `~x`
+        py_unop_to_sir_unop = {UAdd: "+", USub: "-", Not: "!"}
         return make_unary_operator(py_unop_to_sir_unop[type(op)], self.expression(expr))
 
     @transform(
@@ -445,7 +449,6 @@ class Grammar:
         )
     )
     def binop(self, left: expr, op: Any, right: expr):
-        # TODO: boolean operators
         py_binops_to_sir_binops = {
             Add: "+",
             Sub: "-",
@@ -460,6 +463,47 @@ class Grammar:
         if type(op) not in py_binops_to_sir_binops.keys():
             raise DuskSyntaxError(f"Unsupported binary operator '{op}'!", op)
         op = py_binops_to_sir_binops[type(op)]
+        return make_binary_operator(self.expression(left), op, self.expression(right))
+
+    @transform(
+        BoolOp(
+            op=Capture(OneOf(And, Or)).to("op"),
+            values=Capture(Repeat(expr)).to("values"),
+        )
+    )
+    def boolop(self, op, values: _List):
+        py_boolops_to_sir_boolops = {And: "&&", Or: "||"}
+        op = py_boolops_to_sir_boolops[type(op)]
+
+        *remainder, last = values
+        binop = self.expression(last)
+
+        for value in remainder:
+            binop = make_binary_operator(self.expression(value), op, binop)
+
+        return binop
+
+    @transform(
+        Compare(
+            left=Capture(expr).to("left"),
+            # currently we only support two operands
+            ops=Repeat(Capture(_).to("op"), n=1),
+            comparators=Repeat(Capture(expr).to("right"), n=1),
+        ),
+    )
+    def compare(self, left: expr, op, right: expr):
+        # FIXME: we should probably have a better answer when we need such mappings
+        py_compare_to_sir_compare = {
+            Eq: "==",
+            NotEq: "!=",
+            Lt: "<",
+            LtE: "<=",
+            Gt: ">",
+            GtE: ">=",
+        }
+        if type(op) not in py_compare_to_sir_compare.keys():
+            raise DuskSyntaxError(f"Unsupported comparison operator '{op}'", op)
+        op = py_compare_to_sir_compare[type(op)]
         return make_binary_operator(self.expression(left), op, self.expression(right))
 
     @transform(

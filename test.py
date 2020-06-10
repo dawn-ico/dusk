@@ -120,11 +120,11 @@ def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
             b = c
 
         # only if
-        if False:
+        if True and True and not False:
             b = 5 * c
 
         # pseudo only else
-        if False:
+        if a < b or a > b:
             pass
         else:
             a = 15

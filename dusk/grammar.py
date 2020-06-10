@@ -230,6 +230,7 @@ class Grammar:
                     ): self.loop_stmt,
                     # assume it's a vertical region by default
                     For: self.vertical_loop,
+                    Pass: lambda *args, **kwargs: None,
                 },
                 stmt,
             )

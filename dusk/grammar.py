@@ -379,11 +379,15 @@ class Grammar:
         built_in_type_map = {bool: "Boolean", int: "Integer", float: "Double"}
 
         if type(value) in built_in_type_map.keys():
-            return make_literal_access_expr(
+            _type = BuiltinType.TypeID.Value(built_in_type_map[type(value)])
+
+            if isinstance(value, bool):
+                value = "true" if value else "false"
+            else:
                 # TODO: does `str` really work here? (what about NaNs, precision, 1e11 notation, etc)
-                str(value),
-                BuiltinType.TypeID.Value(built_in_type_map[type(value)]),
-            )
+                value = str(value)
+
+            return make_literal_access_expr(value, _type,)
 
         raise DuskSyntaxError(
             f"Unsupported constant '{value}' of type '{type(value)}'!", value

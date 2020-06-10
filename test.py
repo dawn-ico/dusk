@@ -107,10 +107,43 @@ def ICON_laplacian_diamond(
 
 
 @stencil
-def test(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
+def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
     # here we test vertical regions
     for k in backward[-5:]:
         # here we test basic expression
         a = b / c + 5
 
-        # FIXME: test reduction without weights
+        # normal if/else
+        if True:
+            a = b + c
+        else:
+            b = c
+
+        # only if
+        if False:
+            b = 5 * c
+
+        # pseudo only else
+        if False:
+            pass
+        else:
+            a = 15
+
+        # currently broken in dawn
+        # elif no else
+        # if False:
+        #     a = b
+        # elif True:
+        #     c = a + 1
+
+        # currently broken in dawn
+        # elif as well
+        # if False:
+        #    a = b
+        # elif True:
+        #    c = a + 1
+        # else:
+        #    c = a - 1
+
+        # reduction without weights
+        c = reduce(d * 3, "+", 0.0, Edge > Vertex)

@@ -46,6 +46,7 @@ from dusk import (
     OneOf,
     Capture,
     Repeat,
+    BreakPoint,
 )
 from dusk.script import stencil as stencil_decorator, __LOCATION_TYPES__
 

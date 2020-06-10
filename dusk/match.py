@@ -12,6 +12,7 @@ __all__ = [
     "OneOf",
     "Optional",
     "Capture",
+    "BreakPoint",
     "DuskSyntaxError",
 ]
 
@@ -140,6 +141,20 @@ class Capture(Matcher):
         self.name = name
         self.is_list = True
         return self
+
+
+class BreakPoint(Matcher):
+    def __init__(self, matcher, active=True):
+        self.matcher = matcher
+        self.active = active
+
+    def match(self, node, **kwargs):
+        if self.active:
+            from ast import dump
+
+            breakpoint()
+
+        match(self.matcher, node, **kwargs)
 
 
 def match(matcher, node, **kwargs) -> None:

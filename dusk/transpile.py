@@ -31,12 +31,6 @@ def transpile(in_path: str, out_path: str) -> None:
 
         sir = make_sir(in_path, GridType.Value("Unstructured"), stencils)
 
-        try:
-            pprint(sir)
-        except:
-            # TODO: remove once pretty printer is fixed for unstructured elements (e.g., loop stmt)
-            pass
-
         out_code = compile(sir, backend=CodeGenBackend.CXXNaiveIco)
 
         with open(out_path, "w") as out_file:

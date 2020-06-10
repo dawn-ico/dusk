@@ -56,7 +56,7 @@ EmptyList = Repeat(_, n=0)
 AnyContext = OneOf(Load, Store, Del, AugLoad, AugStore, Param)
 
 
-def name(id: str, ctx=Load) -> Name:
+def name(id, ctx=Load) -> Name:
     return Name(id=id, ctx=ctx)
 
 

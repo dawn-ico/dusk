@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Callable, Optional as _Optional
 from ast import AST, stmt, expr
-from abc import ABC, abstractclassmethod
+from abc import ABC, abstractmethod
 
 
 __all__ = [
@@ -49,7 +49,7 @@ class DuskSyntaxError(Exception):
 
 
 class Matcher(ABC):
-    @abstractclassmethod
+    @abstractmethod
     def match(self, ast) -> None:
         raise NotImplementedError
 
@@ -101,6 +101,7 @@ class OneOf(Matcher):
             try:
                 match(matcher, node, **kwargs)
                 matched = True
+                break
             except DuskSyntaxError:
                 pass
 
@@ -130,6 +131,7 @@ class Capture(Matcher):
             else:
                 capturer.setdefault(self.name, []).append(node)
 
+        # FIXME: figure out correct order of capturing/matching
         match(self.matcher, node, capturer=capturer, **kwargs)
 
     def to(self, name: str) -> Capture:

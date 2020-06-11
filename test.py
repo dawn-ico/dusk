@@ -129,6 +129,7 @@ def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
         else:
             a = 15
 
+        a = b if b > c else c
         # currently broken in dawn
         # elif no else
         # if False:

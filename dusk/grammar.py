@@ -34,6 +34,7 @@ from dawn4py.serialization.utils import (
     make_field_access_expr,
     make_unary_operator,
     make_binary_operator,
+    make_ternary_operator,
     make_reduction_over_neighbor_expr,
 )
 
@@ -366,6 +367,7 @@ class Grammar:
                     BinOp: self.binop,
                     BoolOp: self.boolop,
                     Compare: self.compare,
+                    IfExp: self.ifexp,
                     # TODO: hardcoded string
                     Call(func=name("reduce"), args=_, keywords=_): self.reduction,
                 },
@@ -509,6 +511,21 @@ class Grammar:
             raise DuskSyntaxError(f"Unsupported comparison operator '{op}'", op)
         op = py_compare_to_sir_compare[type(op)]
         return make_binary_operator(self.expression(left), op, self.expression(right))
+
+    @transform(
+        IfExp(
+            test=Capture(expr).to("condition"),
+            body=Capture(expr).to("body"),
+            orelse=Capture(expr).to("orelse"),
+        )
+    )
+    def ifexp(self, condition: expr, body: expr, orelse: expr):
+
+        condition = self.expression(condition)
+        body = self.expression(body)
+        orelse = self.expression(orelse)
+
+        return make_ternary_operator(condition, body, orelse)
 
     @transform(
         Call(

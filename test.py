@@ -8,6 +8,7 @@ from dusk.script import (
     backward,
     neighbors,
     reduce,
+    sum_over,
 )
 
 
@@ -107,7 +108,13 @@ def ICON_laplacian_diamond(
 
 
 @stencil
-def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
+def test(
+    a: Field[Edge],
+    b: Field[Edge],
+    c: Field[Edge],
+    d: Field[Vertex],
+    x: Field[Edge > Cell > Vertex],
+):
     # here we test vertical regions
     for k in backward[-5:]:
         # here we test basic expression
@@ -123,6 +130,9 @@ def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
         if True and True and not False:
             b = 5 * c
 
+        c = sum_over(Edge > Cell > Vertex, x * 2, weights=[1, 2, 3, 4], init=5)
+        c = sum_over(Edge > Cell > Vertex, x * 2)
+        # c = sum_over(Edge > Cell > Vertex, x * 2, weights=[1, 2, 3, 4])
         # pseudo only else
         if a < b or a > b:
             pass

@@ -49,3 +49,7 @@ neighbors = Neighbors()
 
 def reduce(*args, **kwargs) -> Any:
     raise NotImplementedError
+
+
+def sum_over(*args, **kwargs) -> Any:
+    raise NotImplementedError

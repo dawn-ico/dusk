@@ -12,6 +12,7 @@ __all__ = [
     "OneOf",
     "Optional",
     "Capture",
+    "FixedList",
     "BreakPoint",
     "DuskSyntaxError",
 ]
@@ -50,7 +51,7 @@ class DuskSyntaxError(Exception):
 
 class Matcher(ABC):
     @abstractmethod
-    def match(self, ast) -> None:
+    def match(self, ast, **kwargs) -> None:
         raise NotImplementedError
 
 
@@ -83,6 +84,26 @@ class Repeat(Matcher):
 
         for node in nodes:
             match(self.matcher, node, **kwargs)
+
+
+class FixedList(Matcher):
+    _fields = ("matchers",)
+
+    def __init__(self, *matchers):
+        self.matchers = list(matchers)
+
+    def match(self, nodes, **kwargs):
+
+        if not isinstance(nodes, list):
+            raise DuskSyntaxError(f"Expected a list, but got '{type(nodes)}'!", nodes)
+
+        if len(nodes) != len(self.matchers):
+            raise DuskSyntaxError(
+                f"Expected a list of length {len(self.matchers)}'!", nodes
+            )
+
+        for matcher, node in zip(self.matchers, nodes):
+            match(matcher, node, **kwargs)
 
 
 class _Ignore(Matcher):
@@ -132,6 +153,7 @@ class Capture(Matcher):
     def match(self, node, capturer=None, **kwargs) -> None:
         if capturer is not None and self.name is not None:
             if not self.is_list:
+                # TODO: throw if value already exists?
                 capturer[self.name] = node
             else:
                 capturer.setdefault(self.name, []).append(node)
@@ -159,11 +181,7 @@ class BreakPoint(Matcher):
 
     def match(self, node, **kwargs):
         if self.active:
-            from dusk.util import pprint_matcher
-
-            def pprint(node):
-
-                print(pprint_matcher(node))
+            from dusk.util import pprint_matcher as pprint
 
             breakpoint()
 

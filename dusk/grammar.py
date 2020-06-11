@@ -47,6 +47,7 @@ from dusk import (
     OneOf,
     Capture,
     Repeat,
+    FixedList,
     BreakPoint,
 )
 from dusk.script import stencil as stencil_decorator, __LOCATION_TYPES__
@@ -370,6 +371,7 @@ class Grammar:
                     IfExp: self.ifexp,
                     # TODO: hardcoded string
                     Call(func=name("reduce"), args=_, keywords=_): self.reduction,
+                    Call(func=name("sum_over"), args=_, keywords=_): self.sum_over,
                 },
                 expr,
             )
@@ -556,4 +558,24 @@ class Grammar:
             self.expression(init),
             self.location_chain(chain),
             weights,
+        )
+
+    @transform(
+        # TODO: bad hardcoded string
+        Call(
+            func=name("sum_over"),
+            args=FixedList(
+                Capture(expr).to("location_chain"), Capture(expr).to("expr")
+            ),
+            # TODO: support keywords such as weights!
+            keywords=BreakPoint(EmptyList),
+        )
+    )
+    def sum_over(self, expr: expr, location_chain: expr):
+
+        return make_reduction_over_neighbor_expr(
+            "+",
+            self.expression(expr),
+            make_literal_access_expr("0", BuiltinType.Integer),
+            self.location_chain(location_chain),
         )

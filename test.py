@@ -44,28 +44,31 @@ def ICON_laplacian_diamond(
             )
 
         # dvt_tang for smagorinsky
-        dvt_tang = reduce(
-            (u_vert[True] * dual_normal_x[True]) + (v_vert[True] * dual_normal_y[True]),
+        dvt_tang = reduce_over(
+            Edge > Cell > Vertex,
+            (u_vert[True] * dual_normal_x[True]) +
+            (v_vert[True] * dual_normal_y[True]),
             "+",
             0.0,
-            Edge > Cell > Vertex,
-            [-1.0, 1.0, 0.0, 0.0],
+            weights=[-1.0, 1.0, 0.0, 0.0],
         )
 
         dvt_tang = dvt_tang * tangent_orientation
 
         # dvt_norm for smagorinsky
-        dvt_norm = reduce(
-            u_vert[True] * dual_normal_x[True] + v_vert[True] * dual_normal_y[True],
+        dvt_norm = reduce_over(
+            Edge > Cell > Vertex,
+            u_vert[True] * dual_normal_x[True] +
+            v_vert[True] * dual_normal_y[True],
             "+",
             0.0,
-            Edge > Cell > Vertex,
-            [0.0, 0.0, -1.0, 1.0],
+            weights=[0.0, 0.0, -1.0, 1.0],
         )
 
         # compute smagorinsky
-        kh_smag_1 = reduce(
-            vn_vert, "+", 0.0, Edge > Cell > Vertex, [-1.0, 1.0, 0.0, 0.0]
+        kh_smag_1 = reduce_over(
+            Edge > Cell > Vertex,
+            vn_vert, "+", 0.0, weights=[-1.0, 1.0, 0.0, 0.0]
         )
 
         kh_smag_1 = (kh_smag_1 * tangent_orientation * inv_primal_edge_length) + (
@@ -74,8 +77,9 @@ def ICON_laplacian_diamond(
 
         kh_smag_1 = kh_smag_1 * kh_smag_1
 
-        kh_smag_2 = reduce(
-            vn_vert, "+", 0.0, Edge > Cell > Vertex, [0.0, 0.0, -1.0, 1.0]
+        kh_smag_2 = reduce_over(
+            Edge > Cell > Vertex,
+            vn_vert, "+", 0.0, weights=[0.0, 0.0, -1.0, 1.0]
         )
 
         kh_smag_2 = (kh_smag_2 * inv_vert_vert_length) + (
@@ -88,12 +92,12 @@ def ICON_laplacian_diamond(
         kh_smag = diff_multfac_smag * (kh_smag_1 + kh_smag_2)
 
         # compute nabla2 using the diamond reduction
-        nabla2 = reduce(
+        nabla2 = reduce_over(
+            Edge > Cell > Vertex,
             4.0 * vn_vert,
             "+",
             0.0,
-            Edge > Cell > Vertex,
-            [
+            weights=[
                 inv_primal_edge_length * inv_primal_edge_length,
                 inv_primal_edge_length * inv_primal_edge_length,
                 inv_vert_vert_length * inv_vert_vert_length,
@@ -130,8 +134,9 @@ def test(
         if True and True and not False:
             b = 5 * c
 
-        c = sum_over(Edge > Cell > Vertex, x * 2, weights=[1, 2, 3, 4], init=5)
-        c = sum_over(Edge > Cell > Vertex, x * 2)
+        c = sum_over(Edge > Cell > Vertex, x * 2,
+                     weights=[-1.3, 2, 3, 4], init=0.1)
+        c = sum_over(Edge > Cell > Vertex, x * 4)
         # c = sum_over(Edge > Cell > Vertex, x * 2, weights=[1, 2, 3, 4])
         # pseudo only else
         if a < b or a > b:
@@ -157,4 +162,4 @@ def test(
         #    c = a - 1
 
         # reduction without weights
-        c = reduce(d * 3, "+", 0.0, Edge > Vertex)
+        c = reduce_over(Edge > Vertex, d * 3, "+", 0.0)

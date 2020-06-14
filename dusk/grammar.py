@@ -46,6 +46,7 @@ from dusk import (
     Optional,
     OneOf,
     Capture,
+    AnyOf,
     Repeat,
     FixedList,
     BreakPoint,
@@ -226,7 +227,8 @@ class Grammar:
                     If: self.if_stmt,
                     For(
                         target=_,
-                        iter=Subscript(value=name(id="neighbors"), slice=_, ctx=_),
+                        iter=Subscript(value=name(
+                            id="neighbors"), slice=_, ctx=_),
                         body=_,
                         orelse=_,
                         type_comment=_,
@@ -288,7 +290,8 @@ class Grammar:
             iter=OneOf(
                 name(id=Capture(OneOf("forward", "backward")).to("order")),
                 Subscript(
-                    value=name(id=Capture(OneOf("forward", "backward")).to("order")),
+                    value=name(id=Capture(
+                        OneOf("forward", "backward")).to("order")),
                     slice=Slice(
                         lower=Capture(_).to("lower"),
                         upper=Capture(_).to("upper"),
@@ -320,7 +323,8 @@ class Grammar:
         }
         return make_vertical_region_decl_stmt(
             make_ast(self.statements(body)),
-            make_interval(lower_level, upper_level, lower_offset, upper_offset),
+            make_interval(lower_level, upper_level,
+                          lower_offset, upper_offset),
             order_mapper[order],
         )
 
@@ -370,7 +374,7 @@ class Grammar:
                     Compare: self.compare,
                     IfExp: self.ifexp,
                     # TODO: hardcoded string
-                    Call(func=name("reduce"), args=_, keywords=_): self.reduction,
+                    Call(func=name("reduce_over"), args=_, keywords=_): self.reduction,
                     Call(func=name("sum_over"), args=_, keywords=_): self.sum_over,
                 },
                 expr,
@@ -419,7 +423,8 @@ class Grammar:
     @transform(
         Subscript(
             value=Capture(expr).to("expr"),
-            slice=Index(value=Constant(value=Capture(bool).to("index"), kind=None)),
+            slice=Index(value=Constant(
+                value=Capture(bool).to("index"), kind=None)),
             ctx=_,
         )
     )
@@ -510,7 +515,8 @@ class Grammar:
             GtE: ">=",
         }
         if type(op) not in py_compare_to_sir_compare.keys():
-            raise DuskSyntaxError(f"Unsupported comparison operator '{op}'", op)
+            raise DuskSyntaxError(
+                f"Unsupported comparison operator '{op}'", op)
         op = py_compare_to_sir_compare[type(op)]
         return make_binary_operator(self.expression(left), op, self.expression(right))
 
@@ -531,51 +537,50 @@ class Grammar:
 
     @transform(
         Call(
-            func=name("reduce"),
-            args=Repeat(Capture(expr).append("args")),
-            keywords=EmptyList,
+            func=name("reduce_over"),
+            args=FixedList(
+                Capture(expr).to("location_chain"), Capture(expr).to("expr"), Constant(value=Capture(
+                    _).to("op"), kind=None), Capture(expr).to("init")
+            ),
+            keywords=AnyOf("arg", {'weights': keyword(arg='weights', value=List(elts=Repeat(Capture(_).append("weights_expr")), ctx=AnyContext)),
+                                   })
         )
     )
-    def reduction(self, args: _List):
-        # FIXME: enrich matcher framework, so we can simplify this
-        if not 4 <= len(args) <= 5:
-            raise DuskSyntaxError(
-                f"Reduction takes 4 or 5 arguments, got {len(args)}!", args
-            )
-
-        expr, op, init, chain, *weights = args
-
-        if not does_match(Constant(value=str, kind=None), op):
-            raise DuskSyntaxError(f"Invalid operator for reduction '{op}'!", op)
-
-        if len(weights) == 1:
-            # TODO: `weights.ctx`` should be `Load`
-            weights = [self.expression(weight) for weight in weights[0].elts]
+    def reduction(self, location_chain: expr, expr: expr, op, init, weights_expr: _List[expr] = None):
+        kwargs = {"weights": [self.expression(
+            x) for x in weights_expr] if weights_expr else None}
 
         return make_reduction_over_neighbor_expr(
-            op.value,
+            op,
             self.expression(expr),
             self.expression(init),
-            self.location_chain(chain),
-            weights,
+            self.location_chain(location_chain),
+            **{k: v for k, v in kwargs.items() if v is not None}
         )
 
     @transform(
-        # TODO: bad hardcoded string
         Call(
             func=name("sum_over"),
             args=FixedList(
                 Capture(expr).to("location_chain"), Capture(expr).to("expr")
             ),
-            # TODO: support keywords such as weights!
-            keywords=BreakPoint(EmptyList),
+            keywords=AnyOf("arg", {'weights': keyword(arg='weights', value=List(
+                elts=Repeat(Capture(_).append("weights_expr")), ctx=AnyContext)),
+                'init': keyword(arg='init', value=Capture(_).to("init_expr")),
+            })
         )
     )
-    def sum_over(self, expr: expr, location_chain: expr):
+    def sum_over(self, expr: expr, location_chain: expr, weights_expr: _List[expr] = None, init_expr: expr = None):
+        kwargs = {"weights": [self.expression(
+            x) for x in weights_expr] if weights_expr else None}
+
+        init = self.expression(init_expr) if init_expr else make_literal_access_expr(
+            "0", BuiltinType.Float)
 
         return make_reduction_over_neighbor_expr(
             "+",
             self.expression(expr),
-            make_literal_access_expr("0", BuiltinType.Integer),
+            init,
             self.location_chain(location_chain),
+            **{k: v for k, v in kwargs.items() if v is not None}
         )

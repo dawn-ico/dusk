@@ -9,6 +9,7 @@ __all__ = [
     "does_match",
     "Ignore",
     "Repeat",
+    "AnyOf",
     "OneOf",
     "Optional",
     "Capture",
@@ -71,7 +72,8 @@ class Repeat(Matcher):
     def match(self, nodes, **kwargs) -> None:
 
         if not isinstance(nodes, list):
-            raise DuskSyntaxError(f"Expected a list, but got '{type(nodes)}'!", nodes)
+            raise DuskSyntaxError(
+                f"Expected a list, but got '{type(nodes)}'!", nodes)
 
         elif isinstance(self.n, int):
             if len(nodes) != self.n:
@@ -86,6 +88,23 @@ class Repeat(Matcher):
             match(self.matcher, node, **kwargs)
 
 
+class AnyOf(Matcher):
+    _fields = ("matchers",)
+
+    def __init__(self, key, matchers):
+        self.key = key
+        self.matchers = matchers
+
+    def match(self, nodes, **kwargs):
+        for anode in nodes:
+            keyval = getattr(anode, self.key)
+            if not keyval in self.matchers:
+                raise DuskSyntaxError(
+                    f"matcher for optional node {keyval} not found", nodes)
+
+            match(self.matchers[keyval], anode, **kwargs)
+
+
 class FixedList(Matcher):
     _fields = ("matchers",)
 
@@ -95,7 +114,8 @@ class FixedList(Matcher):
     def match(self, nodes, **kwargs):
 
         if not isinstance(nodes, list):
-            raise DuskSyntaxError(f"Expected a list, but got '{type(nodes)}'!", nodes)
+            raise DuskSyntaxError(
+                f"Expected a list, but got '{type(nodes)}'!", nodes)
 
         if len(nodes) != len(self.matchers):
             raise DuskSyntaxError(
@@ -133,7 +153,8 @@ class OneOf(Matcher):
                 pass
 
         if not matched:
-            raise DuskSyntaxError("Encountered unrecognized node '{node}'!", node)
+            raise DuskSyntaxError(
+                "Encountered unrecognized node '{node}'!", node)
 
 
 class Optional(OneOf):

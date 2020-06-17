@@ -50,7 +50,7 @@ class DuskSyntaxError(Exception):
 
 class Matcher(ABC):
     @abstractmethod
-    def match(self, ast) -> None:
+    def match(self, ast, **kwargs) -> None:
         raise NotImplementedError
 
 
@@ -132,6 +132,7 @@ class Capture(Matcher):
     def match(self, node, capturer=None, **kwargs) -> None:
         if capturer is not None and self.name is not None:
             if not self.is_list:
+                # TODO: throw if value already exists?
                 capturer[self.name] = node
             else:
                 capturer.setdefault(self.name, []).append(node)
@@ -159,11 +160,7 @@ class BreakPoint(Matcher):
 
     def match(self, node, **kwargs):
         if self.active:
-            from dusk.util import pprint_matcher
-
-            def pprint(node):
-
-                print(pprint_matcher(node))
+            from dusk.util import pprint_matcher as pprint
 
             breakpoint()
 

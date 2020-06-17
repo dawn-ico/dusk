@@ -484,7 +484,7 @@ class Grammar:
         *remainder, last = values
         binop = self.expression(last)
 
-        for value in remainder:
+        for value in reversed(remainder):
             binop = make_binary_operator(self.expression(value), op, binop)
 
         return binop

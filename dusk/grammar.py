@@ -232,7 +232,7 @@ class Grammar:
                     ): self.loop_stmt,
                     # assume it's a vertical region by default
                     For: self.vertical_loop,
-                    Pass: lambda *args, **kwargs: None,
+                    Pass: lambda pass_node: None,
                 },
                 stmt,
             )
@@ -380,20 +380,20 @@ class Grammar:
         # TODO: properly distinguish between float and double
         built_in_type_map = {bool: "Boolean", int: "Integer", float: "Double"}
 
-        if type(value) in built_in_type_map.keys():
-            _type = BuiltinType.TypeID.Value(built_in_type_map[type(value)])
+        if type(value) not in built_in_type_map.keys():
+            raise DuskSyntaxError(
+                f"Unsupported constant '{value}' of type '{type(value)}'!", value
+            )
 
-            if isinstance(value, bool):
-                value = "true" if value else "false"
-            else:
-                # TODO: does `str` really work here? (what about NaNs, precision, 1e11 notation, etc)
-                value = str(value)
+        _type = BuiltinType.TypeID.Value(built_in_type_map[type(value)])
 
-            return make_literal_access_expr(value, _type,)
+        if isinstance(value, bool):
+            value = "true" if value else "false"
+        else:
+            # TODO: does `str` really work here? (what about NaNs, precision, 1e11 notation, etc)
+            value = str(value)
 
-        raise DuskSyntaxError(
-            f"Unsupported constant '{value}' of type '{type(value)}'!", value
-        )
+        return make_literal_access_expr(value, _type,)
 
     @transform(Name(id=Capture(str).to("name"), ctx=AnyContext))
     def var(self, name: str):
@@ -443,7 +443,6 @@ class Grammar:
         )
     )
     def unop(self, expr: expr, op):
-        # do we need `Invert`? E.g. `~x`
         py_unop_to_sir_unop = {UAdd: "+", USub: "-", Not: "!"}
         return make_unary_operator(py_unop_to_sir_unop[type(op)], self.expression(expr))
 

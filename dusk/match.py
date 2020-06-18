@@ -115,9 +115,8 @@ class OneOf(Matcher):
             raise DuskSyntaxError("Encountered unrecognized node '{node}'!", node)
 
 
-class Optional(OneOf):
-    def __init__(self, matcher) -> None:
-        super().__init__(matcher, None)
+def Optional(matcher) -> Matcher:
+    return OneOf(matcher, None)
 
 
 class Capture(Matcher):
@@ -130,15 +129,15 @@ class Capture(Matcher):
         self.is_list = is_list
 
     def match(self, node, capturer=None, **kwargs) -> None:
+
+        match(self.matcher, node, capturer=capturer, **kwargs)
+
         if capturer is not None and self.name is not None:
             if not self.is_list:
-                # TODO: throw if value already exists?
+                # TODO: throw if value already exists once side-effects are handled
                 capturer[self.name] = node
             else:
                 capturer.setdefault(self.name, []).append(node)
-
-        # FIXME: figure out correct order of capturing/matching
-        match(self.matcher, node, capturer=capturer, **kwargs)
 
     def to(self, name: str) -> Capture:
         self.name = name

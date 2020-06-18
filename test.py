@@ -12,6 +12,61 @@ from dusk.script import (
 
 
 @stencil
+def test(
+    a: Field[Edge],
+    b: Field[Edge],
+    c: Field[Edge],
+    d: Field[Vertex],
+    e: Field[Edge > Cell > Vertex],
+):
+    # here we test vertical regions
+    for k in backward[-5:]:
+        # here we test basic expression
+        a = (b[k] + b[k]) / c + 5
+
+        a = (b[k + 1] + b[k - 1]) / c + 5
+
+        a = reduce(d[True, k + 1], "+", 0.0, Edge > Vertex)
+        a = reduce(d[False, k - 1], "+", 0.0, Edge > Vertex)
+
+        # normal if/else
+        if True:
+            a = b + c
+        else:
+            b = c
+
+        # only if
+        if True and True and not False:
+            b = 5 * c
+
+        # pseudo only else
+        if a < b or a > b:
+            pass
+        else:
+            a = 15
+
+        a = b if b > c else c
+        # currently broken in dawn
+        # elif no else
+        # if False:
+        #     a = b
+        # elif True:
+        #     c = a + 1
+
+        # currently broken in dawn
+        # elif as well
+        # if False:
+        #    a = b
+        # elif True:
+        #    c = a + 1
+        # else:
+        #    c = a - 1
+
+        # reduction without weights
+        c = reduce(d * 3, "+", 0.0, Edge > Vertex)
+
+
+@stencil
 def ICON_laplacian_diamond(
     diff_multfac_smag: Field[Edge],
     tangent_orientation: Field[Edge],
@@ -104,47 +159,3 @@ def ICON_laplacian_diamond(
             (8.0 * vn * inv_primal_edge_length * inv_primal_edge_length)
             + (8.0 * vn * inv_vert_vert_length * inv_vert_vert_length)
         )
-
-
-@stencil
-def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
-    # here we test vertical regions
-    for k in backward[-5:]:
-        # here we test basic expression
-        a = b / c + 5
-
-        # normal if/else
-        if True:
-            a = b + c
-        else:
-            b = c
-
-        # only if
-        if True and True and not False:
-            b = 5 * c
-
-        # pseudo only else
-        if a < b or a > b:
-            pass
-        else:
-            a = 15
-
-        a = b if b > c else c
-        # currently broken in dawn
-        # elif no else
-        # if False:
-        #     a = b
-        # elif True:
-        #     c = a + 1
-
-        # currently broken in dawn
-        # elif as well
-        # if False:
-        #    a = b
-        # elif True:
-        #    c = a + 1
-        # else:
-        #    c = a - 1
-
-        # reduction without weights
-        c = reduce(d * 3, "+", 0.0, Edge > Vertex)

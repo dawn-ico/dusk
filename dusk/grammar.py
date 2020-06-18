@@ -47,6 +47,7 @@ from dusk import (
     OneOf,
     Capture,
     Repeat,
+    FixedList,
     BreakPoint,
 )
 from dusk.script import stencil as stencil_decorator, __LOCATION_TYPES__
@@ -415,26 +416,56 @@ class Grammar:
             )
 
     @transform(
-        Subscript(
-            value=Capture(expr).to("expr"),
-            slice=Index(value=Constant(value=Capture(bool).to("index"), kind=None)),
-            ctx=_,
+        BreakPoint(
+            Subscript(
+                value=Capture(expr).to("expr"),
+                slice=Index(
+                    value=OneOf(
+                        Constant(value=Capture(bool).to("hindex"), kind=None),
+                        Tuple(
+                            elts=FixedList(
+                                Constant(value=Capture(bool).to("hindex"), kind=None),
+                                Capture(expr).to("vindex"),
+                            ),
+                            ctx=Load,
+                        ),
+                        Capture(expr).to("vindex"),
+                    )
+                ),
+                ctx=_,
+            ),
+            active=False,
         )
     )
-    def subscript(self, expr: expr, index):
-        expr = self.expression(expr)
+    def subscript(self, expr: expr, hindex: bool = False, vindex: expr = None):
 
-        # TODO: more/better subscript expressions
+        vindex = self.relative_vertical_offset(vindex) if vindex is not None else 0
+
+        expr = self.expression(expr)
         if (
             isinstance(expr, sir_Expr)
             and expr.WhichOneof("expr") == "field_access_expr"
         ):
-            # TODO: vertical offset
-            return make_field_access_expr(expr.field_access_expr.name, [index, 0])
+            return make_field_access_expr(expr.field_access_expr.name, [hindex, vindex])
         else:
             raise NotImplementedError(
                 f"Indexing is currently only supported for fields (got '{expr}')!"
             )
+
+    @transform(
+        OneOf(
+            BinOp(
+                # FIXME: support flexible vertical iteration variables
+                left=name("k"),
+                op=Capture(OneOf(Add, Sub)).to("vop"),
+                right=Constant(value=Capture(int).to("vindex"), kind=None),
+            ),
+            name("k"),
+        ),
+    )
+    def relative_vertical_offset(self, vindex: int = 0, vop=Add()):
+
+        return -vindex if isinstance(vop, Sub) else vindex
 
     @transform(
         UnaryOp(

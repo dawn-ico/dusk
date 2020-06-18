@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Callable, Optional as _Optional
 from ast import AST, stmt, expr
-from abc import ABC, abstractclassmethod
+from abc import ABC, abstractmethod
 
 
 __all__ = [
@@ -12,6 +12,7 @@ __all__ = [
     "OneOf",
     "Optional",
     "Capture",
+    "BreakPoint",
     "DuskSyntaxError",
 ]
 
@@ -48,8 +49,8 @@ class DuskSyntaxError(Exception):
 
 
 class Matcher(ABC):
-    @abstractclassmethod
-    def match(self, ast) -> None:
+    @abstractmethod
+    def match(self, ast, **kwargs) -> None:
         raise NotImplementedError
 
 
@@ -59,6 +60,8 @@ class MatcherError(Exception):
 
 
 class Repeat(Matcher):
+    _fields = ("matcher", "n")
+
     def __init__(self, matcher, n="*"):
         assert isinstance(n, int) or n == "*"
         self.matcher = matcher
@@ -83,6 +86,8 @@ class Repeat(Matcher):
 
 
 class _Ignore(Matcher):
+    _fields = ()
+
     def match(self, node, **kwargs) -> None:
         pass
 
@@ -91,8 +96,10 @@ Ignore = _Ignore()
 
 
 class OneOf(Matcher):
+    _fields = ("matchers",)
+
     def __init__(self, *matchers) -> None:
-        self.matchers = matchers
+        self.matchers = list(matchers)
 
     def match(self, node, **kwargs):
         matched = False
@@ -100,6 +107,7 @@ class OneOf(Matcher):
             try:
                 match(matcher, node, **kwargs)
                 matched = True
+                break
             except DuskSyntaxError:
                 pass
 
@@ -107,29 +115,29 @@ class OneOf(Matcher):
             raise DuskSyntaxError("Encountered unrecognized node '{node}'!", node)
 
 
-class Optional(Matcher):
-    def __init__(self, matcher) -> None:
-        self.matcher = OneOf(None, matcher)
-
-    def match(self, node, **kwargs):
-        match(self.matcher, node, **kwargs)
+def Optional(matcher) -> Matcher:
+    return OneOf(matcher, None)
 
 
 class Capture(Matcher):
     # TODO: could create a proper design & implementation for `is_list` functionality
+    _fields = ("matcher", "name", "is_list")
+
     def __init__(self, matcher, name: str = None, is_list: bool = False) -> None:
         self.matcher = matcher
         self.name = name
         self.is_list = is_list
 
     def match(self, node, capturer=None, **kwargs) -> None:
+
+        match(self.matcher, node, capturer=capturer, **kwargs)
+
         if capturer is not None and self.name is not None:
             if not self.is_list:
+                # TODO: throw if value already exists once side-effects are handled
                 capturer[self.name] = node
             else:
                 capturer.setdefault(self.name, []).append(node)
-
-        match(self.matcher, node, capturer=capturer, **kwargs)
 
     def to(self, name: str) -> Capture:
         self.name = name
@@ -140,6 +148,22 @@ class Capture(Matcher):
         self.name = name
         self.is_list = True
         return self
+
+
+class BreakPoint(Matcher):
+    _fields = ("matcher", "active")
+
+    def __init__(self, matcher, active=True):
+        self.matcher = matcher
+        self.active = active
+
+    def match(self, node, **kwargs):
+        if self.active:
+            from dusk.util import pprint_matcher as pprint
+
+            breakpoint()
+
+        match(self.matcher, node, **kwargs)
 
 
 def match(matcher, node, **kwargs) -> None:

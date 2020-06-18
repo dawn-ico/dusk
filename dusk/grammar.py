@@ -20,7 +20,10 @@ from dawn4py.serialization.utils import (
     make_field_dimensions_unstructured,
     make_ast,
     make_stmt,
+    make_block_stmt,
+    make_expr_stmt,
     make_assignment_stmt,
+    make_if_stmt,
     make_vertical_region_decl_stmt,
     make_vertical_region,
     make_interval,
@@ -31,6 +34,7 @@ from dawn4py.serialization.utils import (
     make_field_access_expr,
     make_unary_operator,
     make_binary_operator,
+    make_ternary_operator,
     make_reduction_over_neighbor_expr,
 )
 
@@ -43,6 +47,7 @@ from dusk import (
     OneOf,
     Capture,
     Repeat,
+    BreakPoint,
 )
 from dusk.script import stencil as stencil_decorator, __LOCATION_TYPES__
 
@@ -52,7 +57,7 @@ EmptyList = Repeat(_, n=0)
 AnyContext = OneOf(Load, Store, Del, AugLoad, AugStore, Param)
 
 
-def name(id: str, ctx=Load) -> Name:
+def name(id, ctx=Load) -> Name:
     return Name(id=id, ctx=ctx)
 
 
@@ -217,6 +222,7 @@ class Grammar:
             stmt = self.dispatch(
                 {
                     OneOf(Assign, AugAssign, AnnAssign): self.assign,
+                    If: self.if_stmt,
                     For(
                         target=_,
                         iter=Subscript(value=name(id="neighbors"), slice=_, ctx=_),
@@ -226,6 +232,7 @@ class Grammar:
                     ): self.loop_stmt,
                     # assume it's a vertical region by default
                     For: self.vertical_loop,
+                    Pass: lambda pass_node: None,
                 },
                 stmt,
             )
@@ -257,6 +264,21 @@ class Grammar:
             # decl_type = self.type(decl_type)
         if rhs is not None:
             return make_assignment_stmt(self.expression(lhs), self.expression(rhs))
+
+    @transform(
+        If(
+            test=Capture(expr).to("condition"),
+            body=Capture(list).to("body"),
+            orelse=Capture(list).to("orelse"),
+        )
+    )
+    def if_stmt(self, condition: expr, body: _List, orelse: _List):
+
+        condition = make_expr_stmt(self.expression(condition))
+        body = make_block_stmt(self.statements(body))
+        orelse = make_block_stmt(self.statements(orelse))
+
+        return make_if_stmt(condition, body, orelse)
 
     @transform(
         For(
@@ -340,9 +362,12 @@ class Grammar:
                 {
                     Constant: self.constant,
                     Name: self.var,
-                    BinOp: self.binop,
-                    UnaryOp: self.unop,
                     Subscript: self.subscript,
+                    UnaryOp: self.unop,
+                    BinOp: self.binop,
+                    BoolOp: self.boolop,
+                    Compare: self.compare,
+                    IfExp: self.ifexp,
                     # TODO: hardcoded string
                     Call(func=name("reduce"), args=_, keywords=_): self.reduction,
                 },
@@ -355,16 +380,20 @@ class Grammar:
         # TODO: properly distinguish between float and double
         built_in_type_map = {bool: "Boolean", int: "Integer", float: "Double"}
 
-        if type(value) in built_in_type_map.keys():
-            return make_literal_access_expr(
-                # TODO: does `str` really work here? (what about NaNs, precision, 1e11 notation, etc)
-                str(value),
-                BuiltinType.TypeID.Value(built_in_type_map[type(value)]),
+        if type(value) not in built_in_type_map.keys():
+            raise DuskSyntaxError(
+                f"Unsupported constant '{value}' of type '{type(value)}'!", value
             )
 
-        raise DuskSyntaxError(
-            f"Unsupported constant '{value}' of type '{type(value)}'!", value
-        )
+        _type = BuiltinType.TypeID.Value(built_in_type_map[type(value)])
+
+        if isinstance(value, bool):
+            value = "true" if value else "false"
+        else:
+            # TODO: does `str` really work here? (what about NaNs, precision, 1e11 notation, etc)
+            value = str(value)
+
+        return make_literal_access_expr(value, _type,)
 
     @transform(Name(id=Capture(str).to("name"), ctx=AnyContext))
     def var(self, name: str):
@@ -409,11 +438,12 @@ class Grammar:
 
     @transform(
         UnaryOp(
-            operand=Capture(expr).to("expr"), op=Capture(OneOf(UAdd, USub)).to("op")
+            operand=Capture(expr).to("expr"),
+            op=Capture(OneOf(UAdd, USub, Not)).to("op"),
         )
     )
     def unop(self, expr: expr, op):
-        py_unop_to_sir_unop = {UAdd: "+", USub: "-"}
+        py_unop_to_sir_unop = {UAdd: "+", USub: "-", Not: "!"}
         return make_unary_operator(py_unop_to_sir_unop[type(op)], self.expression(expr))
 
     @transform(
@@ -424,7 +454,6 @@ class Grammar:
         )
     )
     def binop(self, left: expr, op: Any, right: expr):
-        # TODO: boolean operators
         py_binops_to_sir_binops = {
             Add: "+",
             Sub: "-",
@@ -440,6 +469,62 @@ class Grammar:
             raise DuskSyntaxError(f"Unsupported binary operator '{op}'!", op)
         op = py_binops_to_sir_binops[type(op)]
         return make_binary_operator(self.expression(left), op, self.expression(right))
+
+    @transform(
+        BoolOp(
+            op=Capture(OneOf(And, Or)).to("op"),
+            values=Capture(Repeat(expr)).to("values"),
+        )
+    )
+    def boolop(self, op, values: _List):
+        py_boolops_to_sir_boolops = {And: "&&", Or: "||"}
+        op = py_boolops_to_sir_boolops[type(op)]
+
+        *remainder, last = values
+        binop = self.expression(last)
+
+        for value in reversed(remainder):
+            binop = make_binary_operator(self.expression(value), op, binop)
+
+        return binop
+
+    @transform(
+        Compare(
+            left=Capture(expr).to("left"),
+            # currently we only support two operands
+            ops=Repeat(Capture(_).to("op"), n=1),
+            comparators=Repeat(Capture(expr).to("right"), n=1),
+        ),
+    )
+    def compare(self, left: expr, op, right: expr):
+        # FIXME: we should probably have a better answer when we need such mappings
+        py_compare_to_sir_compare = {
+            Eq: "==",
+            NotEq: "!=",
+            Lt: "<",
+            LtE: "<=",
+            Gt: ">",
+            GtE: ">=",
+        }
+        if type(op) not in py_compare_to_sir_compare.keys():
+            raise DuskSyntaxError(f"Unsupported comparison operator '{op}'", op)
+        op = py_compare_to_sir_compare[type(op)]
+        return make_binary_operator(self.expression(left), op, self.expression(right))
+
+    @transform(
+        IfExp(
+            test=Capture(expr).to("condition"),
+            body=Capture(expr).to("body"),
+            orelse=Capture(expr).to("orelse"),
+        )
+    )
+    def ifexp(self, condition: expr, body: expr, orelse: expr):
+
+        condition = self.expression(condition)
+        body = self.expression(body)
+        orelse = self.expression(orelse)
+
+        return make_ternary_operator(condition, body, orelse)
 
     @transform(
         Call(

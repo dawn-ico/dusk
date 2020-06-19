@@ -4,7 +4,7 @@ from dusk.grammar import Grammar
 from dusk import DuskSyntaxError
 
 from dawn4py import compile, CodeGenBackend
-from dawn4py.serialization import pprint, make_sir
+from dawn4py.serialization import pprint, make_sir, to_json
 from dawn4py.serialization.SIR import GridType
 
 
@@ -29,7 +29,7 @@ def transpile(in_path: str, out_path: str) -> None:
         # TODO: handle errors in different stencils separately
         stencils = [grammar.stencil(node) for node in iter_stencils(in_ast)]
 
-        sir = make_sir(in_path, GridType.Value("Unstructured"), stencils)
+        sir = make_sir(in_path, GridType.Value("Unstructured"), stencils)        
 
         out_code = compile(sir, backend=CodeGenBackend.CXXNaiveIco)
 

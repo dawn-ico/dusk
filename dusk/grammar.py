@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any, Optional as _Optional, Callable, List as _List, Dict as _Dict
 from ast import *
+from dusk.util import pprint_matcher as pprint
 
 from dawn4py.serialization.SIR import (
     BuiltinType,
@@ -123,6 +124,7 @@ class Grammar:
         self.fields = Scope(self.globals)  # str -> Field
         self.variables = Scope(self.fields)
         self.scope = self.variables
+        self.neighbor_iterations = []
 
     def add_symbol(self, name, type) -> None:
         if self.scope.has_symbol(name):
@@ -226,7 +228,8 @@ class Grammar:
                     If: self.if_stmt,
                     For(
                         target=_,
-                        iter=Subscript(value=name(id="neighbors"), slice=_, ctx=_),
+                        iter=Subscript(value=name(
+                            id="neighbors"), slice=_, ctx=_),
                         body=_,
                         orelse=_,
                         type_comment=_,
@@ -288,7 +291,8 @@ class Grammar:
             iter=OneOf(
                 name(id=Capture(OneOf("forward", "backward")).to("order")),
                 Subscript(
-                    value=name(id=Capture(OneOf("forward", "backward")).to("order")),
+                    value=name(id=Capture(
+                        OneOf("forward", "backward")).to("order")),
                     slice=Slice(
                         lower=Capture(_).to("lower"),
                         upper=Capture(_).to("upper"),
@@ -320,7 +324,8 @@ class Grammar:
         }
         return make_vertical_region_decl_stmt(
             make_ast(self.statements(body)),
-            make_interval(lower_level, upper_level, lower_offset, upper_offset),
+            make_interval(lower_level, upper_level,
+                          lower_offset, upper_offset),
             order_mapper[order],
         )
 
@@ -354,7 +359,13 @@ class Grammar:
         )
     )
     def loop_stmt(self, neighborhood, body: _List):
-        return make_loop_stmt(self.statements(body), self.location_chain(neighborhood))
+        neighborhood = self.location_chain(neighborhood)
+
+        self.neighbor_iterations.append(neighborhood)
+        body = self.statements(body)
+        self.neighbor_iterations.pop()
+
+        return make_loop_stmt(body, neighborhood)
 
     @transform(Capture(expr).to("expr"))
     def expression(self, expr: expr):
@@ -409,7 +420,10 @@ class Grammar:
         elif isinstance(type, GlobalVariableValue):
             return make_var_access_expr(name, is_external=True)
         elif isinstance(type, Field):
-            return make_field_access_expr(name)
+            if len(self.neighbor_iterations) > 0:
+                # Inside of neighbor iterations, we use offsets
+                return make_field_access_expr(name, [True, 0])
+            return make_field_access_expr(name, [False, 0])
         else:
             raise DuskInternalError(
                 f"Encountered unknown symbol type '{type}' ('{name}')!"
@@ -421,15 +435,17 @@ class Grammar:
                 value=Capture(expr).to("expr"),
                 slice=Index(
                     value=OneOf(
-                        Constant(value=Capture(bool).to("hindex"), kind=None),
+                        Capture(OneOf(Compare)).to("hindex"),
                         Tuple(
                             elts=FixedList(
-                                Constant(value=Capture(bool).to("hindex"), kind=None),
+                                Capture(OneOf(Compare, Name)).to("hindex"),
                                 Capture(expr).to("vindex"),
                             ),
                             ctx=Load,
-                        ),
-                        Capture(expr).to("vindex"),
+                        ),                        
+                        Capture(BinOp).to("vindex"),
+                        Capture(name("k")).to("vindex"),                        
+                        Capture(Name).to("hindex")
                     )
                 ),
                 ctx=_,
@@ -437,16 +453,50 @@ class Grammar:
             active=False,
         )
     )
-    def subscript(self, expr: expr, hindex: bool = False, vindex: expr = None):
-
-        vindex = self.relative_vertical_offset(vindex) if vindex is not None else 0
-
+    def subscript(self, expr: expr, hindex: Compare = None, vindex: expr = None):        
         expr = self.expression(expr)
+
+        # detect illegal code, if we are not in an interation space there shouldn't be an h offset
+        if len(self.neighbor_iterations) == 0 and hindex is not None:
+            raise DuskSyntaxError(
+                f"neighbor chain subscripts only allowed inside of an iteration")
+
+        vindex = self.relative_vertical_offset(
+            vindex) if vindex is not None else 0                            
+                
+        # if we are not in an interation space, h defaults to false and we're done here
+        if len(self.neighbor_iterations) == 0:
+            return make_field_access_expr(expr.field_access_expr.name, [False, vindex])
+
+        # possible cases
+            # no hor. index is given => default is assumed, i.e. True
+            # a chain is given:
+            #   - the chain matches the iteration space on top of the stack => True
+            #   - the chain does not match the iteartion space on top of the stack:
+            #       => check if the situation is ambigous, if not, the code is illegal
+            #       otherwise, check if the chain is equal to the first element of the
+            #       iteration space on the stack, if so, the offset is set to False,
+            #       otherwise, the code is illegal        
+        
+        #in an interation space, offset defaults to True
+        offset = True
+        if (hindex is not None):
+            chain = self.location_chain(hindex)
+            if (chain != self.neighbor_iterations[-1]):
+                ambigous = chain[0] == chain[-1]
+                if (not ambigous):
+                    raise DuskSyntaxError(f"invalid neighbor chain subscript")
+                else:
+                    if (chain[0] == self.neighbor_iterations[-1][0]):
+                        offset = False
+                    else:
+                        raise DuskSyntaxError(
+                            f"invalid neighbor chain subscript")        
         if (
             isinstance(expr, sir_Expr)
             and expr.WhichOneof("expr") == "field_access_expr"
         ):
-            return make_field_access_expr(expr.field_access_expr.name, [hindex, vindex])
+            return make_field_access_expr(expr.field_access_expr.name, [offset, vindex])
         else:
             raise NotImplementedError(
                 f"Indexing is currently only supported for fields (got '{expr}')!"
@@ -538,7 +588,8 @@ class Grammar:
             GtE: ">=",
         }
         if type(op) not in py_compare_to_sir_compare.keys():
-            raise DuskSyntaxError(f"Unsupported comparison operator '{op}'", op)
+            raise DuskSyntaxError(
+                f"Unsupported comparison operator '{op}'", op)
         op = py_compare_to_sir_compare[type(op)]
         return make_binary_operator(self.expression(left), op, self.expression(right))
 
@@ -574,16 +625,23 @@ class Grammar:
         expr, op, init, chain, *weights = args
 
         if not does_match(Constant(value=str, kind=None), op):
-            raise DuskSyntaxError(f"Invalid operator for reduction '{op}'!", op)
+            raise DuskSyntaxError(
+                f"Invalid operator for reduction '{op}'!", op)
 
         if len(weights) == 1:
             # TODO: `weights.ctx`` should be `Load`
             weights = [self.expression(weight) for weight in weights[0].elts]
 
+        location_chain = self.location_chain(chain)
+
+        self.neighbor_iterations.append(location_chain)
+        expr = self.expression(expr)
+        self.neighbor_iterations.pop()
+
         return make_reduction_over_neighbor_expr(
             op.value,
-            self.expression(expr),
+            expr,
             self.expression(init),
-            self.location_chain(chain),
+            location_chain,
             weights,
         )

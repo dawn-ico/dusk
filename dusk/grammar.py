@@ -429,31 +429,37 @@ class Grammar:
             )
 
     @transform(
-        BreakPoint(
-            Subscript(
-                value=Capture(expr).to("expr"),
-                slice=Index(
-                    value=OneOf(
-                        Tuple(
-                            elts=FixedList(
-                                Capture(OneOf(Compare, Name)).to("hindex"),
-                                Capture(expr).to("vindex"),
-                            ),
-                            ctx=Load,
+        Subscript(
+            value=Capture(expr).to("expr"),
+            slice=Index(
+                value=OneOf(
+                    Tuple(
+                        elts=FixedList(
+                            Capture(OneOf(Compare, Name)).to("hindex"),
+                            Capture(expr).to("vindex"),
                         ),
-                        Capture(BinOp).to("vindex"),
-                        Capture(name("k")).to("vindex"),
-                        Capture(Compare).to("hindex"),
-                        Capture(Name).to("hindex"),
-                    )
-                ),
-                ctx=_,
+                        ctx=Load,
+                    ),
+                    Capture(BinOp).to("vindex"),
+                    Capture(name("k")).to("vindex"),
+                    Capture(Compare).to("hindex"),
+                    Capture(Name).to("hindex"),
+                )
             ),
-            active=True,
+            ctx=_,
         )
     )
     def subscript(self, expr: expr, hindex: expr = None, vindex: expr = None):
         expr = self.expression(expr)
+
+        if (
+            not isinstance(expr, sir_Expr)
+            or expr.WhichOneof("expr") != "field_access_expr"
+        ):
+            raise NotImplementedError(
+                f"Indexing is currently only supported for fields (got '{expr}')!"
+            )
+
         vindex = self.relative_vertical_offset(vindex) if vindex is not None else 0
 
         # detect illegal code, if we are not in an interation space there shouldn't be an h offset
@@ -499,15 +505,7 @@ class Grammar:
         if hindex != neighbor_iteration:
             raise DuskSyntaxError(f"neighbor chain subscript does not match chain")
 
-        if (
-            isinstance(expr, sir_Expr)
-            and expr.WhichOneof("expr") == "field_access_expr"
-        ):
-            return make_field_access_expr(expr.field_access_expr.name, [True, vindex])
-        else:
-            raise NotImplementedError(
-                f"Indexing is currently only supported for fields (got '{expr}')!"
-            )
+        return make_field_access_expr(expr.field_access_expr.name, [True, vindex])
 
     @transform(
         OneOf(

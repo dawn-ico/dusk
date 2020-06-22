@@ -427,30 +427,27 @@ class Grammar:
             )
 
     @transform(
-        BreakPoint(
-            Subscript(
-                value=Capture(expr).to("expr"),
-                slice=Index(
-                    value=OneOf(
-                        Capture(OneOf(Compare)).to("hindex"),
-                        Tuple(
-                            elts=FixedList(
-                                Capture(OneOf(Compare, Name)).to("hindex"),
-                                Capture(expr).to("vindex"),
-                            ),
-                            ctx=Load,
+        Subscript(
+            value=Capture(expr).to("expr"),
+            slice=Index(
+                value=OneOf(
+                    Tuple(
+                        elts=FixedList(
+                            Capture(OneOf(Compare, Name)).to("hindex"),
+                            Capture(expr).to("vindex"),
                         ),
-                        Capture(BinOp).to("vindex"),
-                        Capture(name("k")).to("vindex"),
-                        Capture(Name).to("hindex"),
-                    )
-                ),
-                ctx=_,
+                        ctx=Load,
+                    ),
+                    Capture(BinOp).to("vindex"),
+                    Capture(name("k")).to("vindex"),
+                    Capture(Compare).to("hindex"),
+                    Capture(Name).to("hindex"),
+                )
             ),
-            active=False,
-        )
+            ctx=_,
+        ),
     )
-    def subscript(self, expr: expr, hindex: Compare = None, vindex: expr = None):
+    def subscript(self, expr: expr, hindex: expr = None, vindex: expr = None):
         expr = self.expression(expr)
 
         # detect illegal code, if we are not in an interation space there shouldn't be an h offset
@@ -482,6 +479,7 @@ class Grammar:
             if chain != self.neighbor_iterations[-1]:
                 ambigous = chain[0] == chain[-1]
                 if not ambigous:
+                    # TODO: are we really not allowed to specify hindex in non-ambigous cases?
                     raise DuskSyntaxError(f"invalid neighbor chain subscript")
                 else:
                     if chain[0] == self.neighbor_iterations[-1][0]:
@@ -510,7 +508,6 @@ class Grammar:
         ),
     )
     def relative_vertical_offset(self, vindex: int = 0, vop=Add()):
-
         return -vindex if isinstance(vop, Sub) else vindex
 
     @transform(

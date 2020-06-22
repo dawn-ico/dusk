@@ -430,68 +430,65 @@ class Grammar:
             )
 
     @transform(
-        BreakPoint(
-            Subscript(
-                value=Capture(expr).to("expr"),
-                slice=Index(
-                    value=OneOf(
-                        Capture(OneOf(Compare)).to("hindex"),
-                        Tuple(
-                            elts=FixedList(
-                                Capture(OneOf(Compare, Name)).to("hindex"),
-                                Capture(expr).to("vindex"),
-                            ),
-                            ctx=Load,
-                        ),                        
-                        Capture(BinOp).to("vindex"),
-                        Capture(name("k")).to("vindex"),                        
-                        Capture(Name).to("hindex")
-                    )
-                ),
-                ctx=_,
+        Subscript(
+            value=Capture(expr).to("expr"),
+            slice=Index(
+                value=OneOf(
+                    Tuple(
+                        elts=FixedList(
+                            Capture(OneOf(Compare, Name)).to("hindex"),
+                            Capture(expr).to("vindex"),
+                        ),
+                        ctx=Load,
+                    ),
+                    Capture(BinOp).to("vindex"),
+                    Capture(name("k")).to("vindex"),
+                    Capture(Compare).to("hindex"),
+                    Capture(Name).to("hindex"),
+                )
             ),
-            active=False,
-        )
+            ctx=_,
+        ),
     )
-    def subscript(self, expr: expr, hindex: Compare = None, vindex: expr = None):        
+    def subscript(self, expr: expr, hindex: expr = None, vindex: expr = None):
         expr = self.expression(expr)
 
         # detect illegal code, if we are not in an interation space there shouldn't be an h offset
         if len(self.neighbor_iterations) == 0 and hindex is not None:
             raise DuskSyntaxError(
-                f"neighbor chain subscripts only allowed inside of an iteration")
+                f"neighbor chain subscripts only allowed inside of an iteration"
+            )
 
-        vindex = self.relative_vertical_offset(
-            vindex) if vindex is not None else 0                            
-                
+        vindex = self.relative_vertical_offset(vindex) if vindex is not None else 0
+
         # if we are not in an interation space, h defaults to false and we're done here
         if len(self.neighbor_iterations) == 0:
             return make_field_access_expr(expr.field_access_expr.name, [False, vindex])
 
         # possible cases
-            # no hor. index is given => default is assumed, i.e. True
-            # a chain is given:
-            #   - the chain matches the iteration space on top of the stack => True
-            #   - the chain does not match the iteartion space on top of the stack:
-            #       => check if the situation is ambigous, if not, the code is illegal
-            #       otherwise, check if the chain is equal to the first element of the
-            #       iteration space on the stack, if so, the offset is set to False,
-            #       otherwise, the code is illegal        
-        
-        #in an interation space, offset defaults to True
+        # no hor. index is given => default is assumed, i.e. True
+        # a chain is given:
+        #   - the chain matches the iteration space on top of the stack => True
+        #   - the chain does not match the iteartion space on top of the stack:
+        #       => check if the situation is ambigous, if not, the code is illegal
+        #       otherwise, check if the chain is equal to the first element of the
+        #       iteration space on the stack, if so, the offset is set to False,
+        #       otherwise, the code is illegal
+
+        # in an interation space, offset defaults to True
         offset = True
-        if (hindex is not None):
+        if hindex is not None:
             chain = self.location_chain(hindex)
-            if (chain != self.neighbor_iterations[-1]):
+            if chain != self.neighbor_iterations[-1]:
                 ambigous = chain[0] == chain[-1]
-                if (not ambigous):
+                if not ambigous:
+                    # TODO: are we really not allowed to specify hindex in non-ambigous cases?
                     raise DuskSyntaxError(f"invalid neighbor chain subscript")
                 else:
-                    if (chain[0] == self.neighbor_iterations[-1][0]):
+                    if chain[0] == self.neighbor_iterations[-1][0]:
                         offset = False
                     else:
-                        raise DuskSyntaxError(
-                            f"invalid neighbor chain subscript")        
+                        raise DuskSyntaxError(f"invalid neighbor chain subscript")
         if (
             isinstance(expr, sir_Expr)
             and expr.WhichOneof("expr") == "field_access_expr"
@@ -514,7 +511,6 @@ class Grammar:
         ),
     )
     def relative_vertical_offset(self, vindex: int = 0, vop=Add()):
-
         return -vindex if isinstance(vop, Sub) else vindex
 
     @transform(
@@ -588,8 +584,7 @@ class Grammar:
             GtE: ">=",
         }
         if type(op) not in py_compare_to_sir_compare.keys():
-            raise DuskSyntaxError(
-                f"Unsupported comparison operator '{op}'", op)
+            raise DuskSyntaxError(f"Unsupported comparison operator '{op}'", op)
         op = py_compare_to_sir_compare[type(op)]
         return make_binary_operator(self.expression(left), op, self.expression(right))
 
@@ -639,9 +634,6 @@ class Grammar:
         self.neighbor_iterations.pop()
 
         return make_reduction_over_neighbor_expr(
-            op.value,
-            expr,
-            self.expression(init),
-            location_chain,
-            weights,
+            op.value, expr, self.expression(init), location_chain, weights,
         )
+

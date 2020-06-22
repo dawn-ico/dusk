@@ -174,7 +174,7 @@ def hv_offsets(
 ):
     for k in forward:
         for _ in neighbors[Edge > Cell > Edge]:
-            a = b[k] + c
+            a = b[Edge, k] + c
             a = b[Edge > Cell > Edge, k + 1] + c[Edge > Cell > Edge, k]
             a = b[Edge, k] + b[Edge, k - 1] + c[Edge > Cell > Edge]
 

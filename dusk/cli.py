@@ -19,7 +19,7 @@ def main() -> None:
     )
 
     args = argparser.parse_args()
-    transpile(args.in_file, args.out_file)
+    transpile(args.in_file, args.out_file, backend=args.backend)
 
 
 if __name__ == "__main__":

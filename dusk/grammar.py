@@ -446,7 +446,7 @@ class Grammar:
                     Capture(Name).to("hindex"),
                 )
             ),
-            ctx=_,
+            ctx=AnyContext,
         )
     )
     def subscript(self, expr: expr, hindex: expr = None, vindex: expr = None):
@@ -643,4 +643,3 @@ class Grammar:
         return make_reduction_over_neighbor_expr(
             op.value, expr, self.expression(init), location_chain, weights,
         )
-

@@ -12,6 +12,7 @@ __all__ = [
     "OneOf",
     "Optional",
     "Capture",
+    "FixedList",
     "BreakPoint",
     "DuskSyntaxError",
 ]
@@ -57,6 +58,26 @@ class Matcher(ABC):
 class MatcherError(Exception):
     def __init__(self, text: str) -> None:
         self.text = text
+
+
+class FixedList(Matcher):
+    _fields = ("matchers",)
+
+    def __init__(self, *matchers):
+        self.matchers = list(matchers)
+
+    def match(self, nodes, **kwargs):
+
+        if not isinstance(nodes, list):
+            raise DuskSyntaxError(f"Expected a list, but got '{type(nodes)}'!", nodes)
+
+        if len(nodes) != len(self.matchers):
+            raise DuskSyntaxError(
+                f"Expected a list of length {len(self.matchers)}'!", nodes
+            )
+
+        for matcher, node in zip(self.matchers, nodes):
+            match(matcher, node, **kwargs)
 
 
 class Repeat(Matcher):

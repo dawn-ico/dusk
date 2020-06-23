@@ -4,7 +4,7 @@ from dusk.grammar import Grammar
 from dusk import DuskSyntaxError
 
 from dawn4py import compile, CodeGenBackend
-from dawn4py.serialization import pprint, make_sir
+from dawn4py.serialization import pprint, make_sir, to_json
 from dawn4py.serialization.SIR import GridType
 
 

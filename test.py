@@ -37,14 +37,11 @@ def ICON_laplacian_diamond(
 
         # fill sparse dimension vn vert using the loop concept
         for _ in neighbors[Edge > Cell > Vertex]:
-            vn_vert = (
-                u_vert[True] * primal_normal_x[True]
-                + v_vert[True] * primal_normal_y[True]
-            )
+            vn_vert = u_vert * primal_normal_x + v_vert * primal_normal_y
 
         # dvt_tang for smagorinsky
         dvt_tang = reduce(
-            (u_vert[True] * dual_normal_x[True]) + (v_vert[True] * dual_normal_y[True]),
+            (u_vert * dual_normal_x) + (v_vert * dual_normal_y),
             "+",
             0.0,
             Edge > Cell > Vertex,
@@ -55,7 +52,7 @@ def ICON_laplacian_diamond(
 
         # dvt_norm for smagorinsky
         dvt_norm = reduce(
-            u_vert[True] * dual_normal_x[True] + v_vert[True] * dual_normal_y[True],
+            u_vert * dual_normal_x + v_vert * dual_normal_y,
             "+",
             0.0,
             Edge > Cell > Vertex,
@@ -148,3 +145,36 @@ def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
 
         # reduction without weights
         c = reduce(d * 3, "+", 0.0, Edge > Vertex)
+
+
+@stencil
+def h_offsets(
+    a: Field[Edge > Cell > Edge], b: Field[Edge], c: Field[Edge > Cell > Edge]
+):
+    for _ in forward:
+        for _ in neighbors[Edge > Cell > Edge]:
+            a = b + c  # no offsets, defaults to True
+            a = (
+                b[Edge > Cell > Edge] + c[Edge > Cell > Edge]
+            )  # verbose version of the above
+            a = b[Edge] + c[Edge > Cell > Edge]  # center access for dense field
+
+
+@stencil
+def v_offsets(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
+    for k in forward:
+        # classic central gradient access with "shortcut" on lhs (omit k)
+        a[k] = b[k] + c[k]
+        a[k] = b[k] + c[k - 1]  # classic backward gradient access
+
+
+@stencil
+def hv_offsets(
+    a: Field[Edge > Cell > Edge], b: Field[Edge], c: Field[Edge > Cell > Edge]
+):
+    for k in forward:
+        for _ in neighbors[Edge > Cell > Edge]:
+            a = b[Edge, k] + c
+            a = b[Edge > Cell > Edge, k + 1] + c[Edge > Cell > Edge, k]
+            a = b[Edge, k] + b[Edge, k - 1] + c[Edge > Cell > Edge]
+

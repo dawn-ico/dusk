@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any, Optional as _Optional, Callable, List as _List, Dict as _Dict
 from ast import *
+from dusk.util import pprint_matcher as pprint
 
 from dawn4py.serialization.SIR import (
     BuiltinType,
@@ -47,6 +48,7 @@ from dusk import (
     OneOf,
     Capture,
     Repeat,
+    FixedList,
     BreakPoint,
 )
 from dusk.script import stencil as stencil_decorator, __LOCATION_TYPES__
@@ -122,6 +124,7 @@ class Grammar:
         self.fields = Scope(self.globals)  # str -> Field
         self.variables = Scope(self.fields)
         self.scope = self.variables
+        self.neighbor_iterations = []
 
     def add_symbol(self, name, type) -> None:
         if self.scope.has_symbol(name):
@@ -353,7 +356,13 @@ class Grammar:
         )
     )
     def loop_stmt(self, neighborhood, body: _List):
-        return make_loop_stmt(self.statements(body), self.location_chain(neighborhood))
+        neighborhood = self.location_chain(neighborhood)
+
+        self.neighbor_iterations.append(neighborhood)
+        body = self.statements(body)
+        self.neighbor_iterations.pop()
+
+        return make_loop_stmt(body, neighborhood)
 
     @transform(Capture(expr).to("expr"))
     def expression(self, expr: expr):
@@ -408,7 +417,12 @@ class Grammar:
         elif isinstance(type, GlobalVariableValue):
             return make_var_access_expr(name, is_external=True)
         elif isinstance(type, Field):
-            return make_field_access_expr(name)
+            if len(self.neighbor_iterations) > 0:
+                # Inside of neighbor iterations, we use offsets
+                # FIXME: add ambiguity check
+                # FIXME: implement _smart default_ for horizontal offsets
+                return make_field_access_expr(name, [True, 0])
+            return make_field_access_expr(name, [False, 0])
         else:
             raise DuskInternalError(
                 f"Encountered unknown symbol type '{type}' ('{name}')!"
@@ -417,24 +431,95 @@ class Grammar:
     @transform(
         Subscript(
             value=Capture(expr).to("expr"),
-            slice=Index(value=Constant(value=Capture(bool).to("index"), kind=None)),
-            ctx=_,
+            slice=Index(
+                value=OneOf(
+                    Tuple(
+                        elts=FixedList(
+                            Capture(OneOf(Compare, Name)).to("hindex"),
+                            Capture(expr).to("vindex"),
+                        ),
+                        ctx=Load,
+                    ),
+                    Capture(BinOp).to("vindex"),
+                    Capture(name("k")).to("vindex"),
+                    Capture(Compare).to("hindex"),
+                    Capture(Name).to("hindex"),
+                )
+            ),
+            ctx=AnyContext,
         )
     )
-    def subscript(self, expr: expr, index):
+    def subscript(self, expr: expr, hindex: expr = None, vindex: expr = None):
         expr = self.expression(expr)
 
-        # TODO: more/better subscript expressions
         if (
-            isinstance(expr, sir_Expr)
-            and expr.WhichOneof("expr") == "field_access_expr"
+            not isinstance(expr, sir_Expr)
+            or expr.WhichOneof("expr") != "field_access_expr"
         ):
-            # TODO: vertical offset
-            return make_field_access_expr(expr.field_access_expr.name, [index, 0])
-        else:
             raise NotImplementedError(
                 f"Indexing is currently only supported for fields (got '{expr}')!"
             )
+
+        vindex = self.relative_vertical_offset(vindex) if vindex is not None else 0
+
+        # detect illegal code, if we are not in an interation space there shouldn't be an h offset
+        if len(self.neighbor_iterations) == 0:
+            if hindex is not None:
+                raise DuskSyntaxError(
+                    f"neighbor chain subscripts only allowed inside of an iteration"
+                )
+            # if we are not in an interation space, h defaults to false and we're done here
+            return make_field_access_expr(expr.field_access_expr.name, [False, vindex])
+
+        # possible cases
+        # no hor. index is given => default is assumed, i.e. True
+        # a chain is given:
+        #   - the chain matches the iteration space on top of the stack => True
+        #   - the chain does not match the iteartion space on top of the stack:
+        #       => check if the situation is ambigous, if not, the code is illegal
+        #       otherwise, check if the chain is equal to the first element of the
+        #       iteration space on the stack, if so, the offset is set to False,
+        #       otherwise, the code is illegal
+
+        neighbor_iteration = self.neighbor_iterations[-1]
+
+        if hindex is None:
+            if neighbor_iteration[0] == neighbor_iteration[-1]:  # ambigous case
+                raise DuskSyntaxError(
+                    f"ambigous case, neighbor chain subscript needs to be given"
+                )
+            # FIXME: we should check location type of field to get _smart default_
+            return make_field_access_expr(expr.field_access_expr.name, [True, vindex])
+
+        # I believe if it's non-ambiguous, hindex can still be given optionally
+        hindex = self.location_chain(hindex)
+        # FIXME: check if `hindex` is valid for this field's location type
+
+        if len(hindex) == 1:
+            if neighbor_iteration[0] != hindex[0]:
+                raise DuskSyntaxError(
+                    f"neighbor chain subscript does not match start of chain"
+                )
+            return make_field_access_expr(expr.field_access_expr.name, [False, vindex])
+
+        if hindex != neighbor_iteration:
+            raise DuskSyntaxError(f"neighbor chain subscript does not match chain")
+
+        return make_field_access_expr(expr.field_access_expr.name, [True, vindex])
+
+    @transform(
+        OneOf(
+            BinOp(
+                # FIXME: support flexible vertical iteration variables
+                left=name("k"),
+                op=Capture(OneOf(Add, Sub)).to("vop"),
+                right=Constant(value=Capture(int).to("vindex"), kind=None),
+            ),
+            name("k"),
+        ),
+    )
+    def relative_vertical_offset(self, vindex: int = 0, vop=Add()):
+        return -vindex if isinstance(vop, Sub) else vindex
 
     @transform(
         UnaryOp(
@@ -549,10 +634,12 @@ class Grammar:
             # TODO: `weights.ctx`` should be `Load`
             weights = [self.expression(weight) for weight in weights[0].elts]
 
+        location_chain = self.location_chain(chain)
+
+        self.neighbor_iterations.append(location_chain)
+        expr = self.expression(expr)
+        self.neighbor_iterations.pop()
+
         return make_reduction_over_neighbor_expr(
-            op.value,
-            self.expression(expr),
-            self.expression(init),
-            self.location_chain(chain),
-            weights,
+            op.value, expr, self.expression(init), location_chain, weights,
         )

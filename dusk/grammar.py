@@ -1,20 +1,9 @@
 from __future__ import annotations
-from typing import Any, Optional as _Optional, Callable, List as _List, Dict as _Dict
+import typing as t
 from ast import *
 from dusk.util import pprint_matcher as pprint
 
-from dawn4py.serialization.SIR import (
-    BuiltinType,
-    Field,
-    FieldDimensions,
-    LocationType,
-    VarDeclStmt,
-    GlobalVariableValue,
-    VerticalRegion,
-    Interval,
-    Expr as sir_Expr,
-    FieldAccessExpr,
-)
+import dawn4py.serialization.SIR as sir
 from dawn4py.serialization.utils import (
     make_stencil,
     make_field,
@@ -40,8 +29,7 @@ from dawn4py.serialization.utils import (
     make_fun_call_expr,
 )
 
-from dusk import (
-    DuskSyntaxError,
+from dusk.match import (
     match,
     does_match,
     Ignore as _,
@@ -52,12 +40,21 @@ from dusk import (
     FixedList,
     BreakPoint,
 )
+from dusk.semantics import (
+    Symbol,
+    SymbolKind,
+    Field as DuskField,
+    VerticalIterationVariable,
+    ScopeHelper,
+)
 from dusk.script import (
     stencil as stencil_decorator,
     __LOCATION_TYPES__,
     __UNARY_MATH_FUNCTIONS__,
     __BINARY_MATH_FUNCTIONS__,
 )
+from dusk.errors import DuskInternalError, DuskSyntaxError
+from dusk.util import pprint_matcher as pprint
 
 
 # Short cuts
@@ -69,36 +66,8 @@ def name(id, ctx=Load) -> Name:
     return Name(id=id, ctx=ctx)
 
 
-class Scope:
-    def __init__(self, parent: _Optional[Scope] = None) -> None:
-        self.symbols = {}
-        self.parent = parent
-
-    def has_symbol(self, name: str) -> bool:
-        if name in self.symbols.keys():
-            return True
-        if self.parent is not None:
-            return self.parent.has_symbol(name)
-        return False
-
-    def fetch(self, name: str):
-        if name in self.symbols.keys():
-            return self.symbols[name]
-        if self.parent is not None:
-            return self.parent.fetch(name)
-        raise KeyError
-
-    def add(self, name: str, symbol) -> None:
-        self.symbols[name] = symbol
-
-
-class DuskInternalError(Exception):
-    def __init__(self, message):
-        self.message = message
-
-
-def transform(matcher) -> Callable:
-    def decorator(transformer: Callable) -> Callable:
+def transform(matcher) -> t.Callable:
+    def decorator(transformer: t.Callable) -> t.Callable:
         def transformer_with_matcher(self, node, *args, **kwargs):
             captures = {}
             match(matcher, node, capturer=captures)
@@ -107,6 +76,13 @@ def transform(matcher) -> Callable:
         return transformer_with_matcher
 
     return decorator
+
+
+def dispatch(rules: t.Dict[t.Any, t.Callable], node):
+    for recognizer, rule in rules.items():
+        if does_match(recognizer, node):
+            return rule(node)
+    raise DuskSyntaxError(f"Unrecognized node: '{node}'!", node)
 
 
 class Grammar:
@@ -125,29 +101,8 @@ class Grammar:
         )
 
     def __init__(self):
-        # FIXME: scopes & symbols are currently poorly designed
-        self.globals = Scope()  # str -> GlobalVariableValue
-        self.fields = Scope(self.globals)  # str -> Field
-        self.variables = Scope(self.fields)
-        self.scope = self.variables
+        self.scope_helper = ScopeHelper()
         self.neighbor_iterations = []
-
-    def add_symbol(self, name, type) -> None:
-        if self.scope.has_symbol(name):
-            raise DuskSyntaxError(f"Symbol '{name}' delcared twice!", name)
-        if isinstance(type, Field):
-            self.fields.add(name, type)
-        # TODO: global & local variables
-        else:
-            raise DuskInternalError(
-                f"Encountered unknown symbol type '{type}' ('{name}')!"
-            )
-
-    def dispatch(self, rules: _Dict[Any, Callable], node):
-        for recognizer, rule in rules.items():
-            if does_match(recognizer, node):
-                return rule(node)
-        raise DuskSyntaxError(f"Unrecognized node: '{node}'!", node)
 
     @transform(
         FunctionDef(
@@ -167,13 +122,17 @@ class Grammar:
             type_comment=None,
         )
     )
-    def stencil(self, name: str, body: _List, fields: _List):
-        self.fields.symbols.clear()
-        self.variables.symbols.clear()
-        for field in fields:
-            self.field_declaration(field)
-        body = make_ast(self.statements(body))
-        return make_stencil(name, body, self.fields.symbols.values())
+    def stencil(self, name: str, body: t.List, fields: t.List):
+        with self.scope_helper.new_scope():
+            for field in fields:
+                self.field_declaration(field)
+            body = make_ast(self.statements(body))
+            fields = [
+                symbol.sir
+                for symbol in self.scope_helper.current_scope
+                if isinstance(symbol, DuskField)
+            ]
+        return make_stencil(name, body, fields)
 
     @transform(
         arg(
@@ -183,11 +142,12 @@ class Grammar:
         )
     )
     def field_declaration(self, name: str, type: expr):
-        self.add_symbol(name, make_field(name, self.field_type(type)))
+        self.scope_helper.current_scope.add(
+            name, DuskField(make_field(name, self.field_type(type)))
+        )
 
     def type(self, node):
-        # TODO: built-in types for local variables
-        return self.dispatch({Subscript: self.field_type}, node)
+        return dispatch({Subscript: self.field_type}, node)
 
     @transform(
         Subscript(
@@ -212,7 +172,7 @@ class Grammar:
             ),
         )
     )
-    def location_chain(self, locations: _List):
+    def location_chain(self, locations: t.List):
         return [self.location_type(location) for location in locations]
 
     @transform(Capture(str).to("name"))
@@ -221,14 +181,14 @@ class Grammar:
 
         if name not in location_names:
             raise DuskSyntaxError(f"Invalid location type '{name}'!", name)
-        return LocationType.Value(name)
+        return sir.LocationType.Value(name)
 
     @transform(Capture(list).to("py_stmts"))
-    def statements(self, py_stmts: _List):
+    def statements(self, py_stmts: t.List):
         sir_stmts = []
         for stmt in py_stmts:
             # TODO: bad hardcoded strings
-            stmt = self.dispatch(
+            stmt = dispatch(
                 {
                     OneOf(Assign, AugAssign, AnnAssign): self.assign,
                     If: self.if_stmt,
@@ -281,7 +241,7 @@ class Grammar:
             orelse=Capture(list).to("orelse"),
         )
     )
-    def if_stmt(self, condition: expr, body: _List, orelse: _List):
+    def if_stmt(self, condition: expr, body: t.List, orelse: t.List):
 
         condition = make_expr_stmt(self.expression(condition))
         body = make_block_stmt(self.statements(body))
@@ -313,18 +273,18 @@ class Grammar:
     def vertical_loop(self, order, body, upper=None, lower=None):
 
         if lower is None:
-            lower_level, lower_offset = Interval.Start, 0
+            lower_level, lower_offset = sir.Interval.Start, 0
         else:
             lower_level, lower_offset = self.vertical_interval_bound(lower)
 
         if upper is None:
-            upper_level, upper_offset = Interval.End, 0
+            upper_level, upper_offset = sir.Interval.End, 0
         else:
             upper_level, upper_offset = self.vertical_interval_bound(upper)
 
         order_mapper = {
-            "forward": VerticalRegion.Forward,
-            "backward": VerticalRegion.Backward,
+            "forward": sir.VerticalRegion.Forward,
+            "backward": sir.VerticalRegion.Backward,
         }
         return make_vertical_region_decl_stmt(
             make_ast(self.statements(body)),
@@ -336,12 +296,12 @@ class Grammar:
     @transform(Capture(OneOf(Constant, UnaryOp)).to("bound"))
     def vertical_interval_bound(self, bound):
         if does_match(Constant(value=int, kind=None), bound):
-            return Interval.Start, bound.value
+            return sir.Interval.Start, bound.value
         elif does_match(
             UnaryOp(op=USub, operand=Constant(value=int, kind=None)), bound
         ):
             # FIXME: is this an 'off by one' error?
-            return Interval.End, -bound.operand.value
+            return sir.Interval.End, -bound.operand.value
         else:
             raise DuskSyntaxError(
                 f"Unrecognized vertical intervals bound '{bound}'!", bound
@@ -361,7 +321,7 @@ class Grammar:
             type_comment=None,
         )
     )
-    def loop_stmt(self, neighborhood, body: _List):
+    def loop_stmt(self, neighborhood, body: t.List):
         neighborhood = self.location_chain(neighborhood)
 
         self.neighbor_iterations.append(neighborhood)
@@ -373,7 +333,7 @@ class Grammar:
     @transform(Capture(expr).to("expr"))
     def expression(self, expr: expr):
         return make_expr(
-            self.dispatch(
+            dispatch(
                 {
                     Constant: self.constant,
                     Name: self.var,
@@ -399,7 +359,7 @@ class Grammar:
                 f"Unsupported constant '{value}' of type '{type(value)}'!", value
             )
 
-        _type = BuiltinType.TypeID.Value(built_in_type_map[type(value)])
+        _type = sir.BuiltinType.TypeID.Value(built_in_type_map[type(value)])
 
         if isinstance(value, bool):
             value = "true" if value else "false"
@@ -412,16 +372,11 @@ class Grammar:
     @transform(Name(id=Capture(str).to("name"), ctx=AnyContext))
     def var(self, name: str):
 
-        if not self.scope.has_symbol(name):
+        if not self.scope_helper.current_scope.contains(name):
             raise DuskSyntaxError(f"Undeclared variable '{name}'!", name)
 
-        type = self.scope.fetch(name)
-        # FIXME: what types do we store in the respective scopes?
-        if isinstance(type, VarDeclStmt):
-            return make_var_access_expr(name)
-        elif isinstance(type, GlobalVariableValue):
-            return make_var_access_expr(name, is_external=True)
-        elif isinstance(type, Field):
+        symbol = self.scope_helper.current_scope.fetch(name)
+        if isinstance(symbol, DuskField):
             if len(self.neighbor_iterations) > 0:
                 # Inside of neighbor iterations, we use offsets
                 # FIXME: add ambiguity check
@@ -430,7 +385,7 @@ class Grammar:
             return make_field_access_expr(name, [False, 0])
         else:
             raise DuskInternalError(
-                f"Encountered unknown symbol type '{type}' ('{name}')!"
+                f"Encountered unknown symbol type '{symbol}' ('{name}')!"
             )
 
     @transform(
@@ -458,7 +413,7 @@ class Grammar:
         expr = self.expression(expr)
 
         if (
-            not isinstance(expr, sir_Expr)
+            not isinstance(expr, sir.Expr)
             or expr.WhichOneof("expr") != "field_access_expr"
         ):
             raise NotImplementedError(
@@ -543,7 +498,7 @@ class Grammar:
             right=Capture(expr).to("right"),
         )
     )
-    def binop(self, left: expr, op: Any, right: expr):
+    def binop(self, left: expr, op: t.Any, right: expr):
         py_binops_to_sir_binops = {
             Add: "+",
             Sub: "-",
@@ -566,7 +521,7 @@ class Grammar:
             values=Capture(Repeat(expr)).to("values"),
         )
     )
-    def boolop(self, op, values: _List):
+    def boolop(self, op, values: t.List):
         py_boolops_to_sir_boolops = {And: "&&", Or: "||"}
         op = py_boolops_to_sir_boolops[type(op)]
 
@@ -641,7 +596,7 @@ class Grammar:
             keywords=EmptyList,
         )
     )
-    def math_function(self, name: str, args: _List):
+    def math_function(self, name: str, args: t.List):
 
         if name in self.unary_math_functions:
             if len(args) != 1:
@@ -664,7 +619,7 @@ class Grammar:
     @transform(
         Call(func=name("reduce"), args=Capture(list).to("args"), keywords=EmptyList)
     )
-    def reduction(self, args: _List):
+    def reduction(self, args: t.List):
         # FIXME: enrich matcher framework, so we can simplify this
         if not 4 <= len(args) <= 5:
             raise DuskSyntaxError(

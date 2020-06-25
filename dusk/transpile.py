@@ -1,7 +1,7 @@
 from typing import Iterator, List
 import ast
 from dusk.grammar import Grammar
-from dusk import DuskSyntaxError
+from dusk.errors import DuskSyntaxError
 
 from dawn4py import compile, CodeGenBackend
 from dawn4py.serialization import pprint, make_sir, to_json

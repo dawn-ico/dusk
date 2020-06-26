@@ -8,7 +8,13 @@ from dawn4py.serialization import pprint, make_sir, to_json
 from dawn4py.serialization.SIR import GridType
 
 
-__all__ = ["transpile"]
+__all__ = ["transpile", "backend_map", "default_backend"]
+
+backend_map = {
+    "ico-naive": CodeGenBackend.CXXNaiveIco,
+    "ico-cuda": CodeGenBackend.CUDAIco,
+}
+default_backend = "ico-naive"
 
 
 def iter_stencils(module: ast.Module) -> Iterator[ast.AST]:
@@ -18,7 +24,7 @@ def iter_stencils(module: ast.Module) -> Iterator[ast.AST]:
                 yield stmt
 
 
-def transpile(in_path: str, out_path: str) -> None:
+def transpile(in_path: str, out_path: str, backend: str = default_backend) -> None:
 
     with open(in_path, "r") as in_file:
         in_str = in_file.read()
@@ -31,7 +37,7 @@ def transpile(in_path: str, out_path: str) -> None:
 
         sir = make_sir(in_path, GridType.Value("Unstructured"), stencils)
 
-        out_code = compile(sir, backend=CodeGenBackend.CXXNaiveIco)
+        out_code = compile(sir, backend=backend_map[backend])
 
         with open(out_path, "w") as out_file:
             out_file.write(out_code)

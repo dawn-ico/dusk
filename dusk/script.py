@@ -49,3 +49,92 @@ neighbors = Neighbors()
 
 def reduce(*args, **kwargs) -> Any:
     raise NotImplementedError
+
+
+def max(a: float, b: float) -> float:
+    raise NotImplementedError
+
+
+def min(a: float, b: float) -> float:
+    raise NotImplementedError
+
+
+def pow(base: float, exp: float) -> float:
+    raise NotImplementedError
+
+
+def sqrt(arg: float) -> float:
+    raise NotImplementedError
+
+
+def exp(exp: float) -> float:
+    raise NotImplementedError
+
+
+def log(arg: float) -> float:
+    raise NotImplementedError
+
+
+def sin(arg: float) -> float:
+    raise NotImplementedError
+
+
+def cos(arg: float) -> float:
+    raise NotImplementedError
+
+
+def tan(arg: float) -> float:
+    raise NotImplementedError
+
+
+def arcsin(arg: float) -> float:
+    raise NotImplementedError
+
+
+def arctan(arg: float) -> float:
+    raise NotImplementedError
+
+
+def abs(arg: float) -> float:
+    raise NotImplementedError
+
+
+def floor(arg: float) -> float:
+    raise NotImplementedError
+
+
+def ceil(arg: float) -> float:
+    raise NotImplementedError
+
+
+def isinf(arg: float) -> float:
+    raise NotImplementedError
+
+
+def isnan(arg: float) -> float:
+    raise NotImplementedError
+
+
+__UNARY_MATH_FUNCTIONS__ = {
+    "sqrt",
+    "exp",
+    "log",
+    "sin",
+    "cos",
+    "tan",
+    "arcsin",
+    "arccos",
+    "arctan",
+    "abs",
+    "floor",
+    "ceil",
+    "isinf",
+    "isnan",
+}
+
+__BINARY_MATH_FUNCTIONS__ = {
+    "max",
+    "min",
+    "pow",
+}
+

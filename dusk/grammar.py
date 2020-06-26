@@ -37,6 +37,7 @@ from dawn4py.serialization.utils import (
     make_binary_operator,
     make_ternary_operator,
     make_reduction_over_neighbor_expr,
+    make_fun_call_expr,
 )
 
 from dusk import (
@@ -51,7 +52,12 @@ from dusk import (
     FixedList,
     BreakPoint,
 )
-from dusk.script import stencil as stencil_decorator, __LOCATION_TYPES__
+from dusk.script import (
+    stencil as stencil_decorator,
+    __LOCATION_TYPES__,
+    __UNARY_MATH_FUNCTIONS__,
+    __BINARY_MATH_FUNCTIONS__,
+)
 
 
 # Short cuts
@@ -378,7 +384,7 @@ class Grammar:
                     Compare: self.compare,
                     IfExp: self.ifexp,
                     # TODO: hardcoded string
-                    Call(func=name("reduce"), args=_, keywords=_): self.reduction,
+                    Call(func=_, args=_, keywords=_): self.funcall,
                 },
                 expr,
             )
@@ -613,11 +619,32 @@ class Grammar:
 
     @transform(
         Call(
-            func=name("reduce"),
+            func=Capture(Name).to("fname"),
             args=Repeat(Capture(expr).append("args")),
             keywords=EmptyList,
         )
     )
+    def funcall(self, fname, args: _List):
+        if fname.id == "reduce":
+            return self.reduction(args)
+
+        if fname.id in __UNARY_MATH_FUNCTIONS__:
+            if len(args) != 1:
+                raise DuskSyntaxError(
+                    "function " + fname.idx + " takes exactly one argument"
+                )
+            return make_fun_call_expr("math::" + fname.id, [self.expression(args[0])])
+
+        if fname.id in __BINARY_MATH_FUNCTIONS__:
+            if len(args) != 2:
+                raise DuskSyntaxError(
+                    "function " + fname.idx + " takes exactly two arguments"
+                )
+            return make_fun_call_expr("math::" + fname.id, [self.expression(args[0])])
+
+        raise DuskSyntaxError(f"unrecognized function call")
+
+    @transform(Repeat(Capture(expr).append("args")))
     def reduction(self, args: _List):
         # FIXME: enrich matcher framework, so we can simplify this
         if not 4 <= len(args) <= 5:

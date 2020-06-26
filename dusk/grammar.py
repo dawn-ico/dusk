@@ -633,7 +633,9 @@ class Grammar:
                 raise DuskSyntaxError(
                     "function " + fname.idx + " takes exactly one argument"
                 )
-            return make_fun_call_expr("math::" + fname.id, [self.expression(args[0])])
+            return make_fun_call_expr(
+                "gridtools::dawn::math::" + fname.id, [self.expression(args[0])]
+            )
 
         if fname.id in __BINARY_MATH_FUNCTIONS__:
             if len(args) != 2:

@@ -95,7 +95,7 @@ def arctan(arg: float) -> float:
     raise NotImplementedError
 
 
-def abs(arg: float) -> float:
+def fabs(arg: float) -> float:
     raise NotImplementedError
 
 
@@ -125,7 +125,7 @@ __UNARY_MATH_FUNCTIONS__ = {
     "arcsin",
     "arccos",
     "arctan",
-    "abs",
+    "fabs",
     "floor",
     "ceil",
     "isinf",

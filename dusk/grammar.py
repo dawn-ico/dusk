@@ -640,7 +640,9 @@ class Grammar:
                 raise DuskSyntaxError(
                     "function " + fname.idx + " takes exactly two arguments"
                 )
-            return make_fun_call_expr("math::" + fname.id, [self.expression(args[0])])
+            return make_fun_call_expr(
+                "math::" + fname.id, [self.expression(arg) for arg in args]
+            )
 
         raise DuskSyntaxError(f"unrecognized function call")
 

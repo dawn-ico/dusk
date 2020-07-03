@@ -39,7 +39,7 @@ def ICON_laplacian_diamond(
     nabla2: Field[Edge],
 ) -> None:
 
-    for _ in forward:
+    with levels_upward:
 
         # fill sparse dimension vn vert using the loop concept
         for _ in neighbors[Edge > Cell > Vertex]:
@@ -112,7 +112,7 @@ def ICON_laplacian_diamond(
 @stencil
 def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
     # here we test vertical regions
-    for k in backward[-5:]:
+    with levels_downward[-5:] as k:
         # here we test basic expression
         a = b / c + 5
 
@@ -157,9 +157,9 @@ def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
 def h_offsets(
     a: Field[Edge > Cell > Edge], b: Field[Edge], c: Field[Edge > Cell > Edge]
 ):
-    for _ in forward:
+    with levels_upward:
         for _ in neighbors[Edge > Cell > Edge]:
-            a = b + c  # no offsets, defaults to True
+            a = b[Edge] + c  # no offsets, defaults to True
             a = (
                 b[Edge > Cell > Edge] + c[Edge > Cell > Edge]
             )  # verbose version of the above
@@ -168,7 +168,7 @@ def h_offsets(
 
 @stencil
 def v_offsets(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
-    for k in forward:
+    with levels_upward as k:
         # classic central gradient access with "shortcut" on lhs (omit k)
         a[k] = b[k] + c[k]
         a[k] = b[k] + c[k - 1]  # classic backward gradient access
@@ -178,7 +178,7 @@ def v_offsets(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
 def hv_offsets(
     a: Field[Edge > Cell > Edge], b: Field[Edge], c: Field[Edge > Cell > Edge]
 ):
-    for k in forward:
+    with levels_upward as k:
         for _ in neighbors[Edge > Cell > Edge]:
             a = b[Edge, k] + c
             a = b[Edge > Cell > Edge, k + 1] + c[Edge > Cell > Edge, k]

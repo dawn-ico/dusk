@@ -45,7 +45,7 @@ from dusk.semantics import (
     SymbolKind,
     Field as DuskField,
     VerticalIterationVariable,
-    ScopeHelper,
+    DuskContextHelper,
 )
 from dusk.script import (
     stencil as stencil_decorator,
@@ -101,8 +101,7 @@ class Grammar:
         )
 
     def __init__(self):
-        self.scope_helper = ScopeHelper()
-        self.neighbor_iterations = []
+        self.ctx = DuskContextHelper()
 
     @transform(
         FunctionDef(
@@ -123,13 +122,13 @@ class Grammar:
         )
     )
     def stencil(self, name: str, body: t.List, fields: t.List):
-        with self.scope_helper.new_scope():
+        with self.ctx.scope.new_scope():
             for field in fields:
                 self.field_declaration(field)
             body = make_ast(self.statements(body))
             fields = [
                 symbol.sir
-                for symbol in self.scope_helper.current_scope
+                for symbol in self.ctx.scope.current_scope
                 if isinstance(symbol, DuskField)
             ]
         return make_stencil(name, body, fields)
@@ -142,7 +141,7 @@ class Grammar:
         )
     )
     def field_declaration(self, name: str, type: expr):
-        self.scope_helper.current_scope.add(
+        self.ctx.scope.current_scope.add(
             name, DuskField(make_field(name, self.field_type(type)))
         )
 
@@ -200,7 +199,7 @@ class Grammar:
                         type_comment=_,
                     ): self.loop_stmt,
                     # assume it's a vertical region by default
-                    For: self.vertical_loop,
+                    With: self.vertical_loop,
                     Pass: lambda pass_node: None,
                 },
                 stmt,
@@ -250,27 +249,38 @@ class Grammar:
         return make_if_stmt(condition, body, orelse)
 
     @transform(
-        For(
-            target=Name(id=OneOf("k", "_"), ctx=Store),
-            # TODO: bad hardcoded strings 'forward' & and 'backward'
-            iter=OneOf(
-                name(id=Capture(OneOf("forward", "backward")).to("order")),
-                Subscript(
-                    value=name(id=Capture(OneOf("forward", "backward")).to("order")),
-                    slice=Slice(
-                        lower=Capture(_).to("lower"),
-                        upper=Capture(_).to("upper"),
-                        step=None,
+        With(
+            items=FixedList(
+                # TODO: hardcoded strings
+                withitem(
+                    context_expr=OneOf(
+                        name(
+                            Capture(OneOf("levels_upward", "levels_downward")).to(
+                                "order"
+                            ),
+                        ),
+                        Subscript(
+                            value=name(
+                                id=Capture(
+                                    OneOf("levels_upward", "levels_downward")
+                                ).to("order")
+                            ),
+                            slice=Slice(
+                                lower=Capture(_).to("lower"),
+                                upper=Capture(_).to("upper"),
+                                step=None,
+                            ),
+                            ctx=Load,
+                        ),
                     ),
-                    ctx=Load,
+                    optional_vars=Optional(name(Capture(str).to("var"), ctx=Store)),
                 ),
             ),
             body=Capture(_).to("body"),
-            orelse=EmptyList,
             type_comment=None,
-        )
+        ),
     )
-    def vertical_loop(self, order, body, upper=None, lower=None):
+    def vertical_loop(self, order, body, upper=None, lower=None, var: str = None):
 
         if lower is None:
             lower_level, lower_offset = sir.Interval.Start, 0
@@ -283,14 +293,15 @@ class Grammar:
             upper_level, upper_offset = self.vertical_interval_bound(upper)
 
         order_mapper = {
-            "forward": sir.VerticalRegion.Forward,
-            "backward": sir.VerticalRegion.Backward,
+            "levels_upward": sir.VerticalRegion.Forward,
+            "levels_downward": sir.VerticalRegion.Backward,
         }
-        return make_vertical_region_decl_stmt(
-            make_ast(self.statements(body)),
-            make_interval(lower_level, upper_level, lower_offset, upper_offset),
-            order_mapper[order],
-        )
+        with self.ctx.vertical_region(var):
+            return make_vertical_region_decl_stmt(
+                make_ast(self.statements(body)),
+                make_interval(lower_level, upper_level, lower_offset, upper_offset),
+                order_mapper[order],
+            )
 
     # TODO: richer vertical interval bounds
     @transform(Capture(OneOf(Constant, UnaryOp)).to("bound"))
@@ -324,9 +335,8 @@ class Grammar:
     def loop_stmt(self, neighborhood, body: t.List):
         neighborhood = self.location_chain(neighborhood)
 
-        self.neighbor_iterations.append(neighborhood)
-        body = self.statements(body)
-        self.neighbor_iterations.pop()
+        with self.ctx.location.loop_stmt(neighborhood):
+            body = self.statements(body)
 
         return make_loop_stmt(body, neighborhood)
 
@@ -370,19 +380,14 @@ class Grammar:
         return make_literal_access_expr(value, _type,)
 
     @transform(Name(id=Capture(str).to("name"), ctx=AnyContext))
-    def var(self, name: str):
+    def var(self, name: str, index: expr = None):
 
-        if not self.scope_helper.current_scope.contains(name):
+        if not self.ctx.scope.current_scope.contains(name):
             raise DuskSyntaxError(f"Undeclared variable '{name}'!", name)
 
-        symbol = self.scope_helper.current_scope.fetch(name)
+        symbol = self.ctx.scope.current_scope.fetch(name)
         if isinstance(symbol, DuskField):
-            if len(self.neighbor_iterations) > 0:
-                # Inside of neighbor iterations, we use offsets
-                # FIXME: add ambiguity check
-                # FIXME: implement _smart default_ for horizontal offsets
-                return make_field_access_expr(name, [True, 0])
-            return make_field_access_expr(name, [False, 0])
+            return self.field_access_expr(symbol, index)
         else:
             raise DuskInternalError(
                 f"Encountered unknown symbol type '{symbol}' ('{name}')!"
@@ -390,95 +395,95 @@ class Grammar:
 
     @transform(
         Subscript(
-            value=Capture(expr).to("expr"),
-            slice=Index(
-                value=OneOf(
-                    Tuple(
-                        elts=FixedList(
-                            Capture(OneOf(Compare, Name)).to("hindex"),
-                            Capture(expr).to("vindex"),
-                        ),
-                        ctx=Load,
-                    ),
-                    Capture(BinOp).to("vindex"),
-                    Capture(name("k")).to("vindex"),
-                    Capture(Compare).to("hindex"),
-                    Capture(Name).to("hindex"),
-                )
-            ),
+            value=Capture(Name).to("var"),
+            slice=Index(value=Capture(expr).to("index")),
             ctx=AnyContext,
         )
     )
-    def subscript(self, expr: expr, hindex: expr = None, vindex: expr = None):
-        expr = self.expression(expr)
+    def subscript(self, var: expr, index: expr):
+        return self.var(var, index=index)
 
-        if (
-            not isinstance(expr, sir.Expr)
-            or expr.WhichOneof("expr") != "field_access_expr"
-        ):
-            raise NotImplementedError(
-                f"Indexing is currently only supported for fields (got '{expr}')!"
+    def field_access_expr(self, field: DuskField, index: expr = None):
+        if not self.ctx.location.in_vertical_region:
+            raise DuskSyntaxError(
+                f"Invalid field access {name} outside of a vertical region!"
             )
+        return make_field_access_expr(
+            field.sir.name, self.field_index(index, field=field)
+        )
+
+    @transform(
+        OneOf(
+            Tuple(
+                elts=FixedList(
+                    Capture(OneOf(Compare, Name)).to("hindex"),
+                    Capture(expr).to("vindex"),
+                ),
+                ctx=Load,
+            ),
+            # FIXME: ensure built-ins (like `Edge`) aren't _shadowed_ by variables
+            # TODO: hardcoded string
+            Capture(OneOf(Compare, name(OneOf("Edge", "Cell", "Vertex")))).to("hindex"),
+            Capture(OneOf(BinOp, Name)).to("vindex"),
+            None,
+        )
+    )
+    def field_index(self, field: DuskField, vindex=None, hindex=None):
 
         vindex = self.relative_vertical_offset(vindex) if vindex is not None else 0
+        hindex = self.location_chain(hindex) if hindex is not None else None
 
-        # detect illegal code, if we are not in an interation space there shouldn't be an h offset
-        if len(self.neighbor_iterations) == 0:
+        # FIXME: improve error messages (should include `AST` node if possible)
+        if not self.ctx.location.in_neighbor_iteration:
             if hindex is not None:
                 raise DuskSyntaxError(
-                    f"neighbor chain subscripts only allowed inside of an iteration"
+                    "Horizontal index only allowed inside of an iteration!"
                 )
-            # if we are not in an interation space, h defaults to false and we're done here
-            return make_field_access_expr(expr.field_access_expr.name, [False, vindex])
+            return [False, vindex]
 
-        # possible cases
-        # no hor. index is given => default is assumed, i.e. True
-        # a chain is given:
-        #   - the chain matches the iteration space on top of the stack => True
-        #   - the chain does not match the iteartion space on top of the stack:
-        #       => check if the situation is ambigous, if not, the code is illegal
-        #       otherwise, check if the chain is equal to the first element of the
-        #       iteration space on the stack, if so, the offset is set to False,
-        #       otherwise, the code is illegal
-
-        neighbor_iteration = self.neighbor_iterations[-1]
+        neighbor_iteration = self.ctx.location.current_neighbor_iteration
 
         if hindex is None:
-            if neighbor_iteration[0] == neighbor_iteration[-1]:  # ambigous case
+            if self.ctx.location.is_ambiguous(
+                neighbor_iteration
+            ) and self.ctx.location.is_dense(field.sir):
                 raise DuskSyntaxError(
-                    f"ambigous case, neighbor chain subscript needs to be given"
+                    "ambigous case, neighbor chain subscript needs to be given"
                 )
             # FIXME: we should check location type of field to get _smart default_
-            return make_field_access_expr(expr.field_access_expr.name, [True, vindex])
+            return [True, vindex]
 
-        # I believe if it's non-ambiguous, hindex can still be given optionally
-        hindex = self.location_chain(hindex)
         # FIXME: check if `hindex` is valid for this field's location type
 
         if len(hindex) == 1:
             if neighbor_iteration[0] != hindex[0]:
                 raise DuskSyntaxError(
-                    f"neighbor chain subscript does not match start of chain"
+                    "neighbor chain subscript does not match start of chain"
                 )
-            return make_field_access_expr(expr.field_access_expr.name, [False, vindex])
+            return [False, vindex]
 
         if hindex != neighbor_iteration:
-            raise DuskSyntaxError(f"neighbor chain subscript does not match chain")
+            raise DuskSyntaxError("neighbor chain subscript does not match chain")
 
-        return make_field_access_expr(expr.field_access_expr.name, [True, vindex])
+        return [True, vindex]
 
     @transform(
         OneOf(
             BinOp(
-                # FIXME: support flexible vertical iteration variables
-                left=name("k"),
+                left=name(Capture(str).to("name")),
                 op=Capture(OneOf(Add, Sub)).to("vop"),
                 right=Constant(value=Capture(int).to("vindex"), kind=None),
             ),
-            name("k"),
+            name(Capture(str).to("name")),
         ),
     )
-    def relative_vertical_offset(self, vindex: int = 0, vop=Add()):
+    def relative_vertical_offset(self, name: str, vindex: int = 0, vop=Add()):
+        if not isinstance(
+            self.ctx.scope.current_scope.fetch(name), VerticalIterationVariable
+        ):
+            raise DuskSyntaxError(
+                f"'{name}' isn't a vertical iteration variable!", name
+            )
         return -vindex if isinstance(vop, Sub) else vindex
 
     @transform(
@@ -626,7 +631,7 @@ class Grammar:
                 f"Reduction takes 4 or 5 arguments, got {len(args)}!", args
             )
 
-        expr, op, init, chain, *weights = args
+        expr, op, init, neighborhood, *weights = args
 
         if not does_match(Constant(value=str, kind=None), op):
             raise DuskSyntaxError(f"Invalid operator for reduction '{op}'!", op)
@@ -635,12 +640,11 @@ class Grammar:
             # TODO: `weights.ctx`` should be `Load`
             weights = [self.expression(weight) for weight in weights[0].elts]
 
-        location_chain = self.location_chain(chain)
+        neighborhood = self.location_chain(neighborhood)
 
-        self.neighbor_iterations.append(location_chain)
-        expr = self.expression(expr)
-        self.neighbor_iterations.pop()
+        with self.ctx.location.reduction(neighborhood):
+            expr = self.expression(expr)
 
         return make_reduction_over_neighbor_expr(
-            op.value, expr, self.expression(init), location_chain, weights,
+            op.value, expr, self.expression(init), neighborhood, weights,
         )

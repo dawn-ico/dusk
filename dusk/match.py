@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from ast import AST, stmt, expr
 
 from dusk.errors import DuskSyntaxError
+from dusk.util import pprint_matcher as pprint
 
 
 __all__ = [

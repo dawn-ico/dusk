@@ -99,8 +99,18 @@ class LocationHelper:
 
     @staticmethod
     def is_dense(field: sir.Field) -> bool:
-        assert isinstance(field.field_dimensions, sir.UnstructuredDimension)
-        return 0 < len(field.field_dimensions.sparse_part)
+        assert (
+            field.field_dimensions.WhichOneof("horizontal_dimension")
+            == "unstructured_horizontal_dimension"
+        )
+        return 1 >= len(
+            field.field_dimensions.unstructured_horizontal_dimension.sparse_part
+        )
+
+    @staticmethod
+    def is_ambiguous(chain: LocationChain) -> bool:
+        assert 1 < len(chain)
+        return chain[0] == chain[-1]
 
     def __init__(self):
         self.in_vertical_region = False
@@ -110,10 +120,12 @@ class LocationHelper:
 
     @property
     def current_neighbor_iteration(self) -> LocationChain:
-        assert 0 < len(self.neighbor_iterations)
+        assert self.in_neighbor_iteration
         return self.neighbor_iterations[-1]
 
-    # FIXME: `DuskSyntaxError` requires a node
+    @property
+    def in_neighbor_iteration(self) -> bool:
+        return 0 < len(self.neighbor_iterations)
 
     @contextmanager
     def vertical_region(self):
@@ -127,42 +139,58 @@ class LocationHelper:
         yield
         self.in_vertical_region = False
 
-    # FIXME: try to reuse some of the _neighbor iteration_ logic here
     @contextmanager
-    def loop_stmt(self, location_chain: LocationChain):
+    def _neighbor_iteration(self, location_chain: LocationChain):
+
         if not self.in_vertical_region:
             raise DuskSyntaxError(
-                "Loop statements can only occur inside vertical regions!"
+                "Reductions or loop statements can only occur inside vertical regions!"
             )
+
+        if len(location_chain) <= 1:
+            raise DuskSyntaxError(
+                "Reductions and loop statements must have a location chain of"
+                "length longer than 1!"
+            )
+
+        self.neighbor_iterations.append(location_chain)
+        yield
+        self.neighbor_iterations.pop()
+
+    @contextmanager
+    def loop_stmt(self, location_chain: LocationChain):
+
         if self.in_loop_stmt:
             raise DuskSyntaxError("Nested loop statements aren't allowed!")
         if self.in_reduction:
             raise DuskSyntaxError("Loop statements can't occur inside reductions!")
-        if len(location_chain) <= 1:
-            raise DuskSyntaxError(
-                "Loop statements must have a location chain of length longer than 1!"
-            )
+
         self.in_loop_stmt = True
-        self.neighbor_iterations.append(location_chain)
-        yield
-        self.neighbor_iterations.pop()
+        with self._neighbor_iteration(location_chain):
+            yield
         self.in_loop_stmt = False
 
     @contextmanager
     def reduction(self, location_chain: LocationChain):
-        if not self.in_vertical_region:
-            raise DuskSyntaxError("Reductions can only occur inside vertical regions!")
-        if len(location_chain) <= 1:
-            raise DuskSyntaxError(
-                "Reductions must have a location chain of length longer than 1!"
-            )
         self.in_reduction = True
-        self.neighbor_iterations.append(location_chain)
-        yield
-        self.neighbor_iterations.pop()
+        with self._neighbor_iteration(location_chain):
+            yield
         self.in_reduction = False
 
     def is_valid_horizontal_index(
         self, field: sir.Field, hindex: LocationChain = None
     ) -> bool:
         raise NotImplementedError
+
+
+class DuskContextHelper:
+    def __init__(self) -> None:
+        self.location = LocationHelper()
+        self.scope = ScopeHelper()
+
+    @contextmanager
+    def vertical_region(self, name: Optional[str] = None):
+        with self.location.vertical_region(), self.scope.new_scope():
+            if name is not None:
+                self.scope.current_scope.add(name, VerticalIterationVariable())
+            yield

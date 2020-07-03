@@ -26,7 +26,12 @@ class LocationInfo:
 class DuskSyntaxError(Exception):
     # maybe need more fine grained error hierarchy for, e.g., semantic errors
     # TODO: we should probably have matcher errors vs dusk syntax errors
-    def __init__(self, text: str, node, loc: t.Optional[LocationInfo] = None) -> None:
+    def __init__(
+        self,
+        text: str,
+        node: t.Optional[AST] = None,
+        loc: t.Optional[LocationInfo] = None,
+    ) -> None:
         self.text = text
         self.node = node
         self.loc = loc
@@ -37,5 +42,4 @@ class DuskSyntaxError(Exception):
         assert isinstance(node, (stmt, expr))
         if self.loc is None:
             self.loc = LocationInfo.from_node(node)
-
 

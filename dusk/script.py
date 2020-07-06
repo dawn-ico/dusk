@@ -91,6 +91,10 @@ def arcsin(arg: float) -> float:
     raise NotImplementedError
 
 
+def arccos(arg: float) -> float:
+    raise NotImplementedError
+
+
 def arctan(arg: float) -> float:
     raise NotImplementedError
 
@@ -116,25 +120,25 @@ def isnan(arg: float) -> float:
 
 
 __UNARY_MATH_FUNCTIONS__ = {
-    "sqrt",
-    "exp",
-    "log",
-    "sin",
-    "cos",
-    "tan",
-    "arcsin",
-    "arccos",
-    "arctan",
-    "fabs",
-    "floor",
-    "ceil",
-    "isinf",
-    "isnan",
+    sqrt,
+    exp,
+    log,
+    sin,
+    cos,
+    tan,
+    arcsin,
+    arccos,
+    arctan,
+    fabs,
+    floor,
+    ceil,
+    isinf,
+    isnan,
 }
 
 __BINARY_MATH_FUNCTIONS__ = {
-    "max",
-    "min",
-    "pow",
+    max,
+    min,
+    pow,
 }
 

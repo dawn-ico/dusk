@@ -383,8 +383,7 @@ class Grammar:
                     BoolOp: self.boolop,
                     Compare: self.compare,
                     IfExp: self.ifexp,
-                    # TODO: hardcoded string
-                    Call(func=_, args=_, keywords=_): self.funcall,
+                    Call: self.funcall,
                 },
                 expr,
             )
@@ -618,38 +617,53 @@ class Grammar:
         return make_ternary_operator(condition, body, orelse)
 
     @transform(
+        Capture(Call(func=name(Capture(str).to("name")), args=_, keywords=_,)).to(
+            "node"
+        )
+    )
+    def funcall(self, name: str, node: Call):
+        # TODO: bad hardcoded string
+        if name == "reduce":
+            return self.reduction(node)
+
+        if name in self.unary_math_functions or name in self.binary_math_functions:
+            return self.math_function(node)
+
+        raise DuskSyntaxError(f"unrecognized function call '{name}'", node)
+
+    unary_math_functions = {f.__name__ for f in __UNARY_MATH_FUNCTIONS__}
+    binary_math_functions = {f.__name__ for f in __BINARY_MATH_FUNCTIONS__}
+
+    @transform(
         Call(
-            func=Capture(Name).to("fname"),
-            args=Repeat(Capture(expr).append("args")),
+            func=name(Capture(str).to("name")),
+            args=Capture(list).to("args"),
             keywords=EmptyList,
         )
     )
-    def funcall(self, fname, args: _List):
-        if fname.id == "reduce":
-            return self.reduction(args)
+    def math_function(self, name: str, args: _List):
 
-        if fname.id in __UNARY_MATH_FUNCTIONS__:
+        if name in self.unary_math_functions:
             if len(args) != 1:
-                raise DuskSyntaxError(
-                    "function " + fname.idx + " takes exactly one argument"
-                )
+                raise DuskSyntaxError(f"function '{name}' takes exactly one argument")
             return make_fun_call_expr(
-                "gridtools::dawn::math::" + fname.id, [self.expression(args[0])]
+                f"gridtools::dawn::math::{name}", [self.expression(args[0])]
             )
 
-        if fname.id in __BINARY_MATH_FUNCTIONS__:
+        if name in self.binary_math_functions:
             if len(args) != 2:
-                raise DuskSyntaxError(
-                    "function " + fname.idx + " takes exactly two arguments"
-                )
+                raise DuskSyntaxError(f"function '{name}' takes exactly two arguments")
             return make_fun_call_expr(
-                "gridtools::dawn::math::" + fname.id,
+                f"gridtools::dawn::math::{name}",
                 [self.expression(arg) for arg in args],
             )
 
         raise DuskSyntaxError(f"unrecognized function call")
 
-    @transform(Repeat(Capture(expr).append("args")))
+    # TODO: bad hardcoded string
+    @transform(
+        Call(func=name("reduce"), args=Capture(list).to("args"), keywords=EmptyList)
+    )
     def reduction(self, args: _List):
         # FIXME: enrich matcher framework, so we can simplify this
         if not 4 <= len(args) <= 5:

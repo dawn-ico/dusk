@@ -98,14 +98,20 @@ class LocationHelper:
     neighbor_iterations: List[LocationChain]
 
     @staticmethod
-    def is_dense(field: sir.Field) -> bool:
+    def is_dense(location_chain: LocationChain) -> bool:
+        return len(location_chain) <= 1
+
+    @staticmethod
+    def get_field_dimension(field: sir.Field) -> LocationChain:
         assert (
             field.field_dimensions.WhichOneof("horizontal_dimension")
             == "unstructured_horizontal_dimension"
         )
-        return 1 >= len(
-            field.field_dimensions.unstructured_horizontal_dimension.sparse_part
-        )
+        dimension = field.field_dimensions.unstructured_horizontal_dimension
+        if 0 < len(dimension.sparse_part):
+            return list(dimension.sparse_part)
+        else:
+            return [dimension.dense_location_type]
 
     @staticmethod
     def is_ambiguous(chain: LocationChain) -> bool:

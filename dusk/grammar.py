@@ -311,7 +311,6 @@ class Grammar:
         elif does_match(
             UnaryOp(op=USub, operand=Constant(value=int, kind=None)), bound
         ):
-            # FIXME: is this an 'off by one' error?
             return sir.Interval.End, -bound.operand.value
         else:
             raise DuskSyntaxError(
@@ -433,37 +432,44 @@ class Grammar:
         vindex = self.relative_vertical_offset(vindex) if vindex is not None else 0
         hindex = self.location_chain(hindex) if hindex is not None else None
 
-        # FIXME: improve error messages (should include `AST` node if possible)
         if not self.ctx.location.in_neighbor_iteration:
             if hindex is not None:
                 raise DuskSyntaxError(
-                    "Horizontal index only allowed inside of an iteration!"
+                    f"Invalid horizontal index for field '{field.sir.name}' "
+                    "outside of neighbor iteration!"
                 )
             return [False, vindex]
 
         neighbor_iteration = self.ctx.location.current_neighbor_iteration
+        field_dimension = self.ctx.location.get_field_dimension(field.sir)
+
+        # TODO: we should check that `field_dimension` is valid for
+        #       the current neighbor iteration(s?)
 
         if hindex is None:
-            if self.ctx.location.is_ambiguous(
-                neighbor_iteration
-            ) and self.ctx.location.is_dense(field.sir):
-                raise DuskSyntaxError(
-                    "ambigous case, neighbor chain subscript needs to be given"
-                )
-            # FIXME: we should check location type of field to get _smart default_
+            if self.ctx.location.is_dense(field_dimension):
+                if self.ctx.location.is_ambiguous(neighbor_iteration):
+                    raise DuskSyntaxError(
+                        f"Field '{field.sir.name}' requires a horizontal index "
+                        "inside of ambiguous neighbor iteration!"
+                    )
+
+                return [field_dimension[0] == neighbor_iteration[-1], vindex]
             return [True, vindex]
 
-        # FIXME: check if `hindex` is valid for this field's location type
+        # TODO: check if `hindex` is valid for this field's location type
 
         if len(hindex) == 1:
             if neighbor_iteration[0] != hindex[0]:
                 raise DuskSyntaxError(
-                    "neighbor chain subscript does not match start of chain"
+                    f"Invalid horizontal offset for field '{field.sir.name}'"
                 )
             return [False, vindex]
 
         if hindex != neighbor_iteration:
-            raise DuskSyntaxError("neighbor chain subscript does not match chain")
+            raise DuskSyntaxError(
+                f"Invalid horizontal offset for field '{field.sir.name}'"
+            )
 
         return [True, vindex]
 

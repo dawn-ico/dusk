@@ -187,6 +187,16 @@ def hv_offsets(
 
 @stencil
 def test_math(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Edge]):
-    for _ in forward:
+    with levels_upward:
         a = a + sqrt(b) + cos(c)
         a = max(min(b, c), d)
+
+@stencil
+def other_vertical_iteration_variable(a: Field[Edge], b: Field[Edge]):
+
+    with levels_downward[5:-3] as extraordinary_vertical_iteration_variable_name:
+        a = b + 1
+        a[extraordinary_vertical_iteration_variable_name - 1] = b + 1
+        a = b[extraordinary_vertical_iteration_variable_name + 1] + 1
+    with levels_downward[5:10] as again_extraordinary:
+        a[again_extraordinary - 2] = b[again_extraordinary + 2] + 1

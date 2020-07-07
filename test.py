@@ -8,7 +8,13 @@ from dusk.script import (
     backward,
     neighbors,
     reduce,
+    sqrt,
+    cos,
+    min,
+    max,
 )
+
+# TODO better way to import math funs?
 
 
 @stencil
@@ -178,3 +184,9 @@ def hv_offsets(
             a = b[Edge > Cell > Edge, k + 1] + c[Edge > Cell > Edge, k]
             a = b[Edge, k] + b[Edge, k - 1] + c[Edge > Cell > Edge]
 
+
+@stencil
+def test_math(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Edge]):
+    for _ in forward:
+        a = a + sqrt(b) + cos(c)
+        a = max(min(b, c), d)

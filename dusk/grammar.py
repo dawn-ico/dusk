@@ -37,6 +37,7 @@ from dawn4py.serialization.utils import (
     make_binary_operator,
     make_ternary_operator,
     make_reduction_over_neighbor_expr,
+    make_fun_call_expr,
 )
 
 from dusk import (
@@ -51,7 +52,12 @@ from dusk import (
     FixedList,
     BreakPoint,
 )
-from dusk.script import stencil as stencil_decorator, __LOCATION_TYPES__
+from dusk.script import (
+    stencil as stencil_decorator,
+    __LOCATION_TYPES__,
+    __UNARY_MATH_FUNCTIONS__,
+    __BINARY_MATH_FUNCTIONS__,
+)
 
 
 # Short cuts
@@ -377,8 +383,7 @@ class Grammar:
                     BoolOp: self.boolop,
                     Compare: self.compare,
                     IfExp: self.ifexp,
-                    # TODO: hardcoded string
-                    Call(func=name("reduce"), args=_, keywords=_): self.reduction,
+                    Call: self.funcall,
                 },
                 expr,
             )
@@ -612,11 +617,52 @@ class Grammar:
         return make_ternary_operator(condition, body, orelse)
 
     @transform(
+        Capture(Call(func=name(Capture(str).to("name")), args=_, keywords=_,)).to(
+            "node"
+        )
+    )
+    def funcall(self, name: str, node: Call):
+        # TODO: bad hardcoded string
+        if name == "reduce":
+            return self.reduction(node)
+
+        if name in self.unary_math_functions or name in self.binary_math_functions:
+            return self.math_function(node)
+
+        raise DuskSyntaxError(f"unrecognized function call '{name}'", node)
+
+    unary_math_functions = {f.__name__ for f in __UNARY_MATH_FUNCTIONS__}
+    binary_math_functions = {f.__name__ for f in __BINARY_MATH_FUNCTIONS__}
+
+    @transform(
         Call(
-            func=name("reduce"),
-            args=Repeat(Capture(expr).append("args")),
+            func=name(Capture(str).to("name")),
+            args=Capture(list).to("args"),
             keywords=EmptyList,
         )
+    )
+    def math_function(self, name: str, args: _List):
+
+        if name in self.unary_math_functions:
+            if len(args) != 1:
+                raise DuskSyntaxError(f"function '{name}' takes exactly one argument")
+            return make_fun_call_expr(
+                f"gridtools::dawn::math::{name}", [self.expression(args[0])]
+            )
+
+        if name in self.binary_math_functions:
+            if len(args) != 2:
+                raise DuskSyntaxError(f"function '{name}' takes exactly two arguments")
+            return make_fun_call_expr(
+                f"gridtools::dawn::math::{name}",
+                [self.expression(arg) for arg in args],
+            )
+
+        raise DuskSyntaxError(f"unrecognized function call")
+
+    # TODO: bad hardcoded string
+    @transform(
+        Call(func=name("reduce"), args=Capture(list).to("args"), keywords=EmptyList)
     )
     def reduction(self, args: _List):
         # FIXME: enrich matcher framework, so we can simplify this

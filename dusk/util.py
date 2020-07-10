@@ -1,5 +1,5 @@
-def pprint_matcher(node):
-    print(matcher_to_str(node))
+def pprint_matcher(node, *args, **kwargs):
+    print(matcher_to_str(node, *args, **kwargs))
 
 
 def matcher_to_str(

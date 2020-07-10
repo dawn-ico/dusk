@@ -191,14 +191,19 @@ class Grammar:
                 {
                     OneOf(Assign, AugAssign, AnnAssign): self.assign,
                     If: self.if_stmt,
-                    For(
-                        target=_,
-                        iter=Subscript(value=name(id="neighbors"), slice=_, ctx=_),
+                    With(
+                        items=FixedList(
+                            withitem(
+                                context_expr=Subscript(
+                                    value=name("sparse"), slice=_, ctx=_
+                                ),
+                                optional_vars=_,
+                            )
+                        ),
                         body=_,
-                        orelse=_,
                         type_comment=_,
                     ): self.loop_stmt,
-                    # assume it's a vertical region by default
+                    # assume a vertical region by default
                     With: self.vertical_loop,
                     Pass: lambda pass_node: None,
                 },
@@ -318,16 +323,19 @@ class Grammar:
             )
 
     @transform(
-        For(
-            # TODO: bad hardcoded string `neighbors`
-            target=Name(id="_", ctx=Store),
-            iter=Subscript(
-                value=name(id="neighbors"),
-                slice=Index(value=Capture(_).to("neighborhood")),
-                ctx=Load,
+        With(
+            items=FixedList(
+                # TODO: bad hardcoded string `neighbors`
+                withitem(
+                    context_expr=Subscript(
+                        value=name(id="sparse"),
+                        slice=Index(value=Capture(_).to("neighborhood")),
+                        ctx=Load,
+                    ),
+                    optional_vars=None,
+                )
             ),
             body=Capture(_).to("body"),
-            orelse=EmptyList,
             type_comment=None,
         )
     )
@@ -462,13 +470,13 @@ class Grammar:
         if len(hindex) == 1:
             if neighbor_iteration[0] != hindex[0]:
                 raise DuskSyntaxError(
-                    f"Invalid horizontal offset for field '{field.sir.name}'"
+                    f"Invalid horizontal offset for field '{field.sir.name}'!"
                 )
             return [False, vindex]
 
         if hindex != neighbor_iteration:
             raise DuskSyntaxError(
-                f"Invalid horizontal offset for field '{field.sir.name}'"
+                f"Invalid horizontal offset for field '{field.sir.name}'!"
             )
 
         return [True, vindex]
@@ -563,7 +571,7 @@ class Grammar:
             GtE: ">=",
         }
         if type(op) not in py_compare_to_sir_compare.keys():
-            raise DuskSyntaxError(f"Unsupported comparison operator '{op}'", op)
+            raise DuskSyntaxError(f"Unsupported comparison operator '{op}'!", op)
         op = py_compare_to_sir_compare[type(op)]
         return make_binary_operator(self.expression(left), op, self.expression(right))
 
@@ -595,7 +603,7 @@ class Grammar:
         if name in self.unary_math_functions or name in self.binary_math_functions:
             return self.math_function(node)
 
-        raise DuskSyntaxError(f"unrecognized function call '{name}'", node)
+        raise DuskSyntaxError(f"Unrecognized function call '{name}'!", node)
 
     unary_math_functions = {f.__name__ for f in __UNARY_MATH_FUNCTIONS__}
     binary_math_functions = {f.__name__ for f in __BINARY_MATH_FUNCTIONS__}
@@ -611,20 +619,20 @@ class Grammar:
 
         if name in self.unary_math_functions:
             if len(args) != 1:
-                raise DuskSyntaxError(f"function '{name}' takes exactly one argument")
+                raise DuskSyntaxError(f"Function '{name}' takes exactly one argument!")
             return make_fun_call_expr(
                 f"gridtools::dawn::math::{name}", [self.expression(args[0])]
             )
 
         if name in self.binary_math_functions:
             if len(args) != 2:
-                raise DuskSyntaxError(f"function '{name}' takes exactly two arguments")
+                raise DuskSyntaxError(f"Function '{name}' takes exactly two arguments!")
             return make_fun_call_expr(
                 f"gridtools::dawn::math::{name}",
                 [self.expression(arg) for arg in args],
             )
 
-        raise DuskSyntaxError(f"unrecognized function call")
+        raise DuskSyntaxError(f"Unrecognized function call '{name}'!")
 
     # TODO: bad hardcoded string
     @transform(

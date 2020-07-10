@@ -42,7 +42,7 @@ def ICON_laplacian_diamond(
     with levels_upward:
 
         # fill sparse dimension vn vert using the loop concept
-        for _ in neighbors[Edge > Cell > Vertex]:
+        with sparse[Edge > Cell > Vertex]:
             vn_vert = u_vert * primal_normal_x + v_vert * primal_normal_y
 
         # dvt_tang for smagorinsky
@@ -158,7 +158,7 @@ def h_offsets(
     a: Field[Edge > Cell > Edge], b: Field[Edge], c: Field[Edge > Cell > Edge]
 ):
     with levels_upward:
-        for _ in neighbors[Edge > Cell > Edge]:
+        with sparse[Edge > Cell > Edge]:
             a = b[Edge] + c  # no offsets, defaults to True
             a = (
                 b[Edge > Cell > Edge] + c[Edge > Cell > Edge]
@@ -179,7 +179,7 @@ def hv_offsets(
     a: Field[Edge > Cell > Edge], b: Field[Edge], c: Field[Edge > Cell > Edge]
 ):
     with levels_upward as k:
-        for _ in neighbors[Edge > Cell > Edge]:
+        with sparse[Edge > Cell > Edge]:
             a = b[Edge, k] + c
             a = b[Edge > Cell > Edge, k + 1] + c[Edge > Cell > Edge, k]
             a = b[Edge, k] + b[Edge, k - 1] + c[Edge > Cell > Edge]
@@ -190,6 +190,7 @@ def test_math(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Edge]):
     with levels_upward:
         a = a + sqrt(b) + cos(c)
         a = max(min(b, c), d)
+
 
 @stencil
 def other_vertical_iteration_variable(a: Field[Edge], b: Field[Edge]):

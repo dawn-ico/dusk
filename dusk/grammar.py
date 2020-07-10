@@ -597,8 +597,11 @@ class Grammar:
     )
     def funcall(self, name: str, node: Call):
         # TODO: bad hardcoded string
-        if name == "reduce":
-            return self.reduction(node)
+        if name == "reduce_over":
+            return self.reduce_over(node)
+
+        if name in {"sum_over", "min_over", "max_over"}:
+            return self.short_reduce_over(node)
 
         if name in self.unary_math_functions or name in self.binary_math_functions:
             return self.math_function(node)
@@ -634,31 +637,110 @@ class Grammar:
 
         raise DuskSyntaxError(f"Unrecognized function call '{name}'!")
 
-    # TODO: bad hardcoded string
     @transform(
-        Call(func=name("reduce"), args=Capture(list).to("args"), keywords=EmptyList)
+        Call(
+            # TODO: bad hardcoded string
+            func=name("reduce_over"),
+            args=FixedList(
+                Capture(expr).to("neighborhood"),
+                Capture(expr).to("expr"),
+                name(Capture(str).to("op")),
+            ),
+            keywords=Repeat(
+                keyword(
+                    arg=Capture(str).append("kwargs_keys"),
+                    value=Capture(expr).append("kwargs_values"),
+                )
+            ),
+        ),
     )
-    def reduction(self, args: t.List):
-        # FIXME: enrich matcher framework, so we can simplify this
-        if not 4 <= len(args) <= 5:
-            raise DuskSyntaxError(
-                f"Reduction takes 4 or 5 arguments, got {len(args)}!", args
-            )
+    def reduce_over(
+        self,
+        expr: expr,
+        neighborhood: expr,
+        op: str,
+        kwargs_keys: t.List[str],
+        kwargs_values: t.List[expr],
+    ):
 
-        expr, op, init, neighborhood, *weights = args
+        return self.reduction(expr, neighborhood, op, kwargs_keys, kwargs_values)
 
-        if not does_match(Constant(value=str, kind=None), op):
-            raise DuskSyntaxError(f"Invalid operator for reduction '{op}'!", op)
+    @transform(
+        Call(
+            func=name(
+                # TODO: bad hardcoded string
+                Capture(OneOf("sum_over", "min_over", "max_over")).to("short_cut_name")
+            ),
+            args=FixedList(Capture(expr).to("neighborhood"), Capture(expr).to("expr"),),
+            keywords=Repeat(
+                keyword(
+                    arg=Capture(str).append("kwargs_keys"),
+                    value=Capture(expr).append("kwargs_values"),
+                )
+            ),
+        ),
+    )
+    def short_reduce_over(
+        self,
+        expr: expr,
+        neighborhood: expr,
+        short_cut_name: str,
+        kwargs_keys: t.List[str],
+        kwargs_values: t.List[expr],
+    ):
+        short_cut_to_op_map = {"sum_over": "sum", "min_over": "min", "max_over": "max"}
+        op = short_cut_to_op_map[short_cut_name]
 
-        if len(weights) == 1:
-            # TODO: `weights.ctx`` should be `Load`
-            weights = [self.expression(weight) for weight in weights[0].elts]
+        return self.reduction(expr, neighborhood, op, kwargs_keys, kwargs_values)
+
+    def reduction(
+        self,
+        expr: expr,
+        neighborhood: expr,
+        op: str,
+        kwargs_keys: t.List[str],
+        kwargs_values: t.List[expr],
+    ):
+        kwargs = dict(zip(kwargs_keys, kwargs_values))
+        assert len(kwargs) == len(kwargs_keys) == len(kwargs_values)
+
+        # TODO: what about these hard coded strings?
+        wrong_kwargs = kwargs.keys() - {"init", "weights"}
+        if 0 < len(wrong_kwargs):
+            raise DuskSyntaxError(f"Unsupported kwargs '{wrong_kwargs}' in reduction!")
 
         neighborhood = self.location_chain(neighborhood)
-
         with self.ctx.location.reduction(neighborhood):
             expr = self.expression(expr)
 
-        return make_reduction_over_neighbor_expr(
-            op.value, expr, self.expression(init), neighborhood, weights,
-        )
+        op_map = {"sum": "+", "mul": "*", "min": "min", "max": "max"}
+        if not op in op_map:
+            raise DuskSyntaxError(f"Invalid operator '{op}' for reduction!")
+
+        if "init" in kwargs:
+            init = self.expression(kwargs["init"])
+        else:
+            # TODO: "min" and "max" are kinda stupid
+            # we should use something like this:
+            # https://en.cppreference.com/w/cpp/types/numeric_limits/max
+            # but for double it should be 1.79769e+308
+            # FIXME: probably breaks for int
+            init_map = {
+                "sum": "0",
+                "mul": "1",
+                "min": "9" * 400,
+                "max": "-" + ("9" * 400),
+            }
+            init = make_literal_access_expr(
+                init_map[op], sir.BuiltinType.TypeID.Value("Double")
+            )
+
+        op = op_map[op]
+
+        weights = None
+        if "weights" in kwargs:
+            # TODO: check for `kwargs["weight"].ctx == Load`?
+            weights = [self.expression(weight) for weight in kwargs["weights"].elts]
+
+        return make_reduction_over_neighbor_expr(op, expr, init, neighborhood, weights,)
+

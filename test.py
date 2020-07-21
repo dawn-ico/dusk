@@ -199,7 +199,6 @@ def other_vertical_iteration_variable(a: Field[Edge], b: Field[Edge]):
         a = b[extraordinary_vertical_iteration_variable_name + 1] + 1
     with levels_downward[5:10] as again_extraordinary:
         a[again_extraordinary - 2] = b[again_extraordinary + 2] + 1
-<<<<<<< HEAD
 
 
 @stencil
@@ -223,5 +222,3 @@ def temp_field(a: Field[Edge], b: Field[Edge], out: Field[Edge]):
     with levels_downward as k:
         out = x
 
-=======
->>>>>>> master

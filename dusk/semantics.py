@@ -63,14 +63,11 @@ class Scope(Iterable[Symbol]):
 
         self.symbols[name] = symbol
 
-<<<<<<< HEAD
     def is_stencil_scope(self) -> bool:
         # NOTE not very nice since there is an default scope above the stencil
         #      maybe save level of scope nest?
         return self.parent.parent is None
 
-=======
->>>>>>> master
     def __iter__(self) -> Iterator[Symbol]:
         if self.parent is None:
             return iter(self.symbols.values())

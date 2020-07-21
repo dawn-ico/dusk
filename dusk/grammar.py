@@ -144,16 +144,11 @@ class Grammar:
         )
     )
     def field_declaration(self, name: str, type: expr):
-<<<<<<< HEAD
         self.add_field_declaration(name, type, False)
 
     def add_field_declaration(self, name: str, type: expr, is_temporary: bool):
         self.ctx.scope.current_scope.add(
             name, DuskField(make_field(name, self.field_type(type), is_temporary))
-=======
-        self.ctx.scope.current_scope.add(
-            name, DuskField(make_field(name, self.field_type(type)))
->>>>>>> master
         )
 
     def type(self, node):

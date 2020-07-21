@@ -134,15 +134,21 @@ class Grammar:
         return make_stencil(name, body, fields)
 
     @transform(
-        arg(
-            arg=Capture(str).to("name"),
-            annotation=Capture(expr).to("type"),
-            type_comment=None,
+        OneOf(
+            arg(
+                arg=Capture(str).to("name"),
+                annotation=Capture(expr).to("type"),
+                type_comment=None,
+            ),
+            AnnAssign(),
         )
     )
     def field_declaration(self, name: str, type: expr):
+        self.add_field_declaration(name, type, False)
+
+    def add_field_declaration(self, name: str, type: expr, is_temporary: bool):
         self.ctx.scope.current_scope.add(
-            name, DuskField(make_field(name, self.field_type(type)))
+            name, DuskField(make_field(name, self.field_type(type), is_temporary))
         )
 
     def type(self, node):
@@ -228,13 +234,17 @@ class Grammar:
             ),
         )
     )
+    # NOTE is this really the correct name for this matcher?
+    # x: Field[Edge] is matched by this, but I wouldn't call this an assignment
     def assign(self, lhs: expr, rhs: expr, decl_type: expr = None):
         if decl_type is not None:
-            # TODO: implement locals and temporary fields
-            raise NotImplementedError(
-                "Variable declarations currently not implemented in stencil bodies!"
-            )
-            # decl_type = self.type(decl_type)
+            # TODO implement locals
+            if not self.ctx.scope.current_scope.is_stencil_scope():
+                raise DuskSyntaxError(
+                    "temp field declarations only allowed on stencil scope"
+                )
+            self.add_field_declaration(lhs.id, decl_type, is_temporary=True)
+
         if rhs is not None:
             return make_assignment_stmt(self.expression(lhs), self.expression(rhs))
 

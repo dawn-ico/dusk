@@ -17,9 +17,12 @@ def main() -> None:
         choices=set(backend_map.keys()),
         default=default_backend,
     )
+    argparser.add_argument(
+        "--dump-sir", default=False, action="store_true", help="dump sir to disk",
+    )
 
     args = argparser.parse_args()
-    transpile(args.in_file, args.out_file, backend=args.backend)
+    transpile(args.in_file, args.out_file, backend=args.backend, dump_sir=args.dump_sir)
 
 
 if __name__ == "__main__":

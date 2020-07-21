@@ -131,21 +131,21 @@ def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
             a = 15
 
         a = b if b > c else c
-        # currently broken in dawn
-        # elif no else
-        # if False:
-        #     a = b
-        # elif True:
-        #     c = a + 1
 
-        # currently broken in dawn
-        # elif as well
-        # if False:
-        #    a = b
-        # elif True:
-        #    c = a + 1
-        # else:
-        #    c = a - 1
+    with levels_downward[-5:] as k:
+        a = b / c + 5
+        if False:
+            a = b
+        elif True:
+            c = a + 1
+
+    with levels_downward[-5:] as k:
+        if False:
+            a = b
+        elif True:
+            c = a + 1
+        else:
+            c = a - 1
 
         # reduction without weights
         c = reduce_over(Edge > Vertex, d * 3, sum, init=0.0,)
@@ -199,3 +199,26 @@ def other_vertical_iteration_variable(a: Field[Edge], b: Field[Edge]):
         a = b[extraordinary_vertical_iteration_variable_name + 1] + 1
     with levels_downward[5:10] as again_extraordinary:
         a[again_extraordinary - 2] = b[again_extraordinary + 2] + 1
+
+
+@stencil
+def temp_field_demoted(a: Field[Edge], b: Field[Edge], out: Field[Edge]):
+    x: Field[Edge]
+    with levels_downward:
+        x = a + b
+        if x > 3:
+            out = x
+
+
+@stencil
+def temp_field(a: Field[Edge], b: Field[Edge], out: Field[Edge]):
+    x: Field[Edge]
+    with levels_downward as k:
+        x = 1  # stricly necessary in dawn
+        if a > 5:
+            x = a
+        else:
+            x = b
+    with levels_downward as k:
+        out = x
+

@@ -1,20 +1,9 @@
 from __future__ import annotations
-from typing import Any, Optional as _Optional, Callable, List as _List, Dict as _Dict
+import typing as t
 from ast import *
 from dusk.util import pprint_matcher as pprint
 
-from dawn4py.serialization.SIR import (
-    BuiltinType,
-    Field,
-    FieldDimensions,
-    LocationType,
-    VarDeclStmt,
-    GlobalVariableValue,
-    VerticalRegion,
-    Interval,
-    Expr as sir_Expr,
-    FieldAccessExpr,
-)
+import dawn4py.serialization.SIR as sir
 from dawn4py.serialization.utils import (
     make_stencil,
     make_field,
@@ -40,8 +29,7 @@ from dawn4py.serialization.utils import (
     make_fun_call_expr,
 )
 
-from dusk import (
-    DuskSyntaxError,
+from dusk.match import (
     match,
     does_match,
     Ignore as _,
@@ -52,12 +40,21 @@ from dusk import (
     FixedList,
     BreakPoint,
 )
+from dusk.semantics import (
+    Symbol,
+    SymbolKind,
+    Field as DuskField,
+    VerticalIterationVariable,
+    DuskContextHelper,
+)
 from dusk.script import (
     stencil as stencil_decorator,
     __LOCATION_TYPES__,
     __UNARY_MATH_FUNCTIONS__,
     __BINARY_MATH_FUNCTIONS__,
 )
+from dusk.errors import DuskInternalError, DuskSyntaxError
+from dusk.util import pprint_matcher as pprint
 
 
 # Short cuts
@@ -69,36 +66,8 @@ def name(id, ctx=Load) -> Name:
     return Name(id=id, ctx=ctx)
 
 
-class Scope:
-    def __init__(self, parent: _Optional[Scope] = None) -> None:
-        self.symbols = {}
-        self.parent = parent
-
-    def has_symbol(self, name: str) -> bool:
-        if name in self.symbols.keys():
-            return True
-        if self.parent is not None:
-            return self.parent.has_symbol(name)
-        return False
-
-    def fetch(self, name: str):
-        if name in self.symbols.keys():
-            return self.symbols[name]
-        if self.parent is not None:
-            return self.parent.fetch(name)
-        raise KeyError
-
-    def add(self, name: str, symbol) -> None:
-        self.symbols[name] = symbol
-
-
-class DuskInternalError(Exception):
-    def __init__(self, message):
-        self.message = message
-
-
-def transform(matcher) -> Callable:
-    def decorator(transformer: Callable) -> Callable:
+def transform(matcher) -> t.Callable:
+    def decorator(transformer: t.Callable) -> t.Callable:
         def transformer_with_matcher(self, node, *args, **kwargs):
             captures = {}
             match(matcher, node, capturer=captures)
@@ -107,6 +76,13 @@ def transform(matcher) -> Callable:
         return transformer_with_matcher
 
     return decorator
+
+
+def dispatch(rules: t.Dict[t.Any, t.Callable], node):
+    for recognizer, rule in rules.items():
+        if does_match(recognizer, node):
+            return rule(node)
+    raise DuskSyntaxError(f"Unrecognized node: '{node}'!", node)
 
 
 class Grammar:
@@ -125,29 +101,7 @@ class Grammar:
         )
 
     def __init__(self):
-        # FIXME: scopes & symbols are currently poorly designed
-        self.globals = Scope()  # str -> GlobalVariableValue
-        self.fields = Scope(self.globals)  # str -> Field
-        self.variables = Scope(self.fields)
-        self.scope = self.variables
-        self.neighbor_iterations = []
-
-    def add_symbol(self, name, type) -> None:
-        if self.scope.has_symbol(name):
-            raise DuskSyntaxError(f"Symbol '{name}' delcared twice!", name)
-        if isinstance(type, Field):
-            self.fields.add(name, type)
-        # TODO: global & local variables
-        else:
-            raise DuskInternalError(
-                f"Encountered unknown symbol type '{type}' ('{name}')!"
-            )
-
-    def dispatch(self, rules: _Dict[Any, Callable], node):
-        for recognizer, rule in rules.items():
-            if does_match(recognizer, node):
-                return rule(node)
-        raise DuskSyntaxError(f"Unrecognized node: '{node}'!", node)
+        self.ctx = DuskContextHelper()
 
     @transform(
         FunctionDef(
@@ -167,13 +121,17 @@ class Grammar:
             type_comment=None,
         )
     )
-    def stencil(self, name: str, body: _List, fields: _List):
-        self.fields.symbols.clear()
-        self.variables.symbols.clear()
-        for field in fields:
-            self.field_declaration(field)
-        body = make_ast(self.statements(body))
-        return make_stencil(name, body, self.fields.symbols.values())
+    def stencil(self, name: str, body: t.List, fields: t.List):
+        with self.ctx.scope.new_scope():
+            for field in fields:
+                self.field_declaration(field)
+            body = make_ast(self.statements(body))
+            fields = [
+                symbol.sir
+                for symbol in self.ctx.scope.current_scope
+                if isinstance(symbol, DuskField)
+            ]
+        return make_stencil(name, body, fields)
 
     @transform(
         arg(
@@ -183,11 +141,12 @@ class Grammar:
         )
     )
     def field_declaration(self, name: str, type: expr):
-        self.add_symbol(name, make_field(name, self.field_type(type)))
+        self.ctx.scope.current_scope.add(
+            name, DuskField(make_field(name, self.field_type(type)))
+        )
 
     def type(self, node):
-        # TODO: built-in types for local variables
-        return self.dispatch({Subscript: self.field_type}, node)
+        return dispatch({Subscript: self.field_type}, node)
 
     @transform(
         Subscript(
@@ -212,7 +171,7 @@ class Grammar:
             ),
         )
     )
-    def location_chain(self, locations: _List):
+    def location_chain(self, locations: t.List):
         return [self.location_type(location) for location in locations]
 
     @transform(Capture(str).to("name"))
@@ -221,26 +180,31 @@ class Grammar:
 
         if name not in location_names:
             raise DuskSyntaxError(f"Invalid location type '{name}'!", name)
-        return LocationType.Value(name)
+        return sir.LocationType.Value(name)
 
     @transform(Capture(list).to("py_stmts"))
-    def statements(self, py_stmts: _List):
+    def statements(self, py_stmts: t.List):
         sir_stmts = []
         for stmt in py_stmts:
             # TODO: bad hardcoded strings
-            stmt = self.dispatch(
+            stmt = dispatch(
                 {
                     OneOf(Assign, AugAssign, AnnAssign): self.assign,
                     If: self.if_stmt,
-                    For(
-                        target=_,
-                        iter=Subscript(value=name(id="neighbors"), slice=_, ctx=_),
+                    With(
+                        items=FixedList(
+                            withitem(
+                                context_expr=Subscript(
+                                    value=name("sparse"), slice=_, ctx=_
+                                ),
+                                optional_vars=_,
+                            )
+                        ),
                         body=_,
-                        orelse=_,
                         type_comment=_,
                     ): self.loop_stmt,
-                    # assume it's a vertical region by default
-                    For: self.vertical_loop,
+                    # assume a vertical region by default
+                    With: self.vertical_loop,
                     Pass: lambda pass_node: None,
                 },
                 stmt,
@@ -281,7 +245,7 @@ class Grammar:
             orelse=Capture(list).to("orelse"),
         )
     )
-    def if_stmt(self, condition: expr, body: _List, orelse: _List):
+    def if_stmt(self, condition: expr, body: t.List, orelse: t.List):
 
         condition = make_expr_stmt(self.expression(condition))
         body = make_block_stmt(self.statements(body))
@@ -290,90 +254,103 @@ class Grammar:
         return make_if_stmt(condition, body, orelse)
 
     @transform(
-        For(
-            target=Name(id=OneOf("k", "_"), ctx=Store),
-            # TODO: bad hardcoded strings 'forward' & and 'backward'
-            iter=OneOf(
-                name(id=Capture(OneOf("forward", "backward")).to("order")),
-                Subscript(
-                    value=name(id=Capture(OneOf("forward", "backward")).to("order")),
-                    slice=Slice(
-                        lower=Capture(_).to("lower"),
-                        upper=Capture(_).to("upper"),
-                        step=None,
+        With(
+            items=FixedList(
+                # TODO: hardcoded strings
+                withitem(
+                    context_expr=OneOf(
+                        name(
+                            Capture(OneOf("levels_upward", "levels_downward")).to(
+                                "order"
+                            ),
+                        ),
+                        Subscript(
+                            value=name(
+                                id=Capture(
+                                    OneOf("levels_upward", "levels_downward")
+                                ).to("order")
+                            ),
+                            slice=Slice(
+                                lower=Capture(_).to("lower"),
+                                upper=Capture(_).to("upper"),
+                                step=None,
+                            ),
+                            ctx=Load,
+                        ),
                     ),
-                    ctx=Load,
+                    optional_vars=Optional(name(Capture(str).to("var"), ctx=Store)),
                 ),
             ),
             body=Capture(_).to("body"),
-            orelse=EmptyList,
             type_comment=None,
-        )
+        ),
     )
-    def vertical_loop(self, order, body, upper=None, lower=None):
+    def vertical_loop(self, order, body, upper=None, lower=None, var: str = None):
 
         if lower is None:
-            lower_level, lower_offset = Interval.Start, 0
+            lower_level, lower_offset = sir.Interval.Start, 0
         else:
             lower_level, lower_offset = self.vertical_interval_bound(lower)
 
         if upper is None:
-            upper_level, upper_offset = Interval.End, 0
+            upper_level, upper_offset = sir.Interval.End, 0
         else:
             upper_level, upper_offset = self.vertical_interval_bound(upper)
 
         order_mapper = {
-            "forward": VerticalRegion.Forward,
-            "backward": VerticalRegion.Backward,
+            "levels_upward": sir.VerticalRegion.Forward,
+            "levels_downward": sir.VerticalRegion.Backward,
         }
-        return make_vertical_region_decl_stmt(
-            make_ast(self.statements(body)),
-            make_interval(lower_level, upper_level, lower_offset, upper_offset),
-            order_mapper[order],
-        )
+        with self.ctx.vertical_region(var):
+            return make_vertical_region_decl_stmt(
+                make_ast(self.statements(body)),
+                make_interval(lower_level, upper_level, lower_offset, upper_offset),
+                order_mapper[order],
+            )
 
     # TODO: richer vertical interval bounds
     @transform(Capture(OneOf(Constant, UnaryOp)).to("bound"))
     def vertical_interval_bound(self, bound):
         if does_match(Constant(value=int, kind=None), bound):
-            return Interval.Start, bound.value
+            return sir.Interval.Start, bound.value
         elif does_match(
             UnaryOp(op=USub, operand=Constant(value=int, kind=None)), bound
         ):
-            # FIXME: is this an 'off by one' error?
-            return Interval.End, -bound.operand.value
+            return sir.Interval.End, -bound.operand.value
         else:
             raise DuskSyntaxError(
                 f"Unrecognized vertical intervals bound '{bound}'!", bound
             )
 
     @transform(
-        For(
-            # TODO: bad hardcoded string `neighbors`
-            target=Name(id="_", ctx=Store),
-            iter=Subscript(
-                value=name(id="neighbors"),
-                slice=Index(value=Capture(_).to("neighborhood")),
-                ctx=Load,
+        With(
+            items=FixedList(
+                # TODO: bad hardcoded string `neighbors`
+                withitem(
+                    context_expr=Subscript(
+                        value=name(id="sparse"),
+                        slice=Index(value=Capture(_).to("neighborhood")),
+                        ctx=Load,
+                    ),
+                    optional_vars=None,
+                )
             ),
             body=Capture(_).to("body"),
-            orelse=EmptyList,
             type_comment=None,
         )
     )
-    def loop_stmt(self, neighborhood, body: _List):
+    def loop_stmt(self, neighborhood, body: t.List):
         neighborhood = self.location_chain(neighborhood)
 
-        self.neighbor_iterations.append(neighborhood)
-        body = self.statements(body)
-        self.neighbor_iterations.pop()
+        with self.ctx.location.loop_stmt(neighborhood):
+            body = self.statements(body)
 
         return make_loop_stmt(body, neighborhood)
 
     @transform(Capture(expr).to("expr"))
     def expression(self, expr: expr):
         return make_expr(
-            self.dispatch(
+            dispatch(
                 {
                     Constant: self.constant,
                     Name: self.var,
@@ -399,7 +376,7 @@ class Grammar:
                 f"Unsupported constant '{value}' of type '{type(value)}'!", value
             )
 
-        _type = BuiltinType.TypeID.Value(built_in_type_map[type(value)])
+        _type = sir.BuiltinType.TypeID.Value(built_in_type_map[type(value)])
 
         if isinstance(value, bool):
             value = "true" if value else "false"
@@ -410,120 +387,117 @@ class Grammar:
         return make_literal_access_expr(value, _type,)
 
     @transform(Name(id=Capture(str).to("name"), ctx=AnyContext))
-    def var(self, name: str):
+    def var(self, name: str, index: expr = None):
 
-        if not self.scope.has_symbol(name):
+        if not self.ctx.scope.current_scope.contains(name):
             raise DuskSyntaxError(f"Undeclared variable '{name}'!", name)
 
-        type = self.scope.fetch(name)
-        # FIXME: what types do we store in the respective scopes?
-        if isinstance(type, VarDeclStmt):
-            return make_var_access_expr(name)
-        elif isinstance(type, GlobalVariableValue):
-            return make_var_access_expr(name, is_external=True)
-        elif isinstance(type, Field):
-            if len(self.neighbor_iterations) > 0:
-                # Inside of neighbor iterations, we use offsets
-                # FIXME: add ambiguity check
-                # FIXME: implement _smart default_ for horizontal offsets
-                return make_field_access_expr(name, [True, 0])
-            return make_field_access_expr(name, [False, 0])
+        symbol = self.ctx.scope.current_scope.fetch(name)
+        if isinstance(symbol, DuskField):
+            return self.field_access_expr(symbol, index)
         else:
             raise DuskInternalError(
-                f"Encountered unknown symbol type '{type}' ('{name}')!"
+                f"Encountered unknown symbol type '{symbol}' ('{name}')!"
             )
 
     @transform(
         Subscript(
-            value=Capture(expr).to("expr"),
-            slice=Index(
-                value=OneOf(
-                    Tuple(
-                        elts=FixedList(
-                            Capture(OneOf(Compare, Name)).to("hindex"),
-                            Capture(expr).to("vindex"),
-                        ),
-                        ctx=Load,
-                    ),
-                    Capture(BinOp).to("vindex"),
-                    Capture(name("k")).to("vindex"),
-                    Capture(Compare).to("hindex"),
-                    Capture(Name).to("hindex"),
-                )
-            ),
+            value=Capture(Name).to("var"),
+            slice=Index(value=Capture(expr).to("index")),
             ctx=AnyContext,
         )
     )
-    def subscript(self, expr: expr, hindex: expr = None, vindex: expr = None):
-        expr = self.expression(expr)
+    def subscript(self, var: expr, index: expr):
+        return self.var(var, index=index)
 
-        if (
-            not isinstance(expr, sir_Expr)
-            or expr.WhichOneof("expr") != "field_access_expr"
-        ):
-            raise NotImplementedError(
-                f"Indexing is currently only supported for fields (got '{expr}')!"
+    def field_access_expr(self, field: DuskField, index: expr = None):
+        if not self.ctx.location.in_vertical_region:
+            raise DuskSyntaxError(
+                f"Invalid field access {name} outside of a vertical region!"
             )
+        return make_field_access_expr(
+            field.sir.name, self.field_index(index, field=field)
+        )
+
+    @transform(
+        OneOf(
+            Tuple(
+                elts=FixedList(
+                    Capture(OneOf(Compare, Name)).to("hindex"),
+                    Capture(expr).to("vindex"),
+                ),
+                ctx=Load,
+            ),
+            # FIXME: ensure built-ins (like `Edge`) aren't _shadowed_ by variables
+            # TODO: hardcoded string
+            Capture(OneOf(Compare, name(OneOf("Edge", "Cell", "Vertex")))).to("hindex"),
+            Capture(OneOf(BinOp, Name)).to("vindex"),
+            None,
+        )
+    )
+    def field_index(self, field: DuskField, vindex=None, hindex=None):
 
         vindex = self.relative_vertical_offset(vindex) if vindex is not None else 0
+        hindex = self.location_chain(hindex) if hindex is not None else None
 
-        # detect illegal code, if we are not in an interation space there shouldn't be an h offset
-        if len(self.neighbor_iterations) == 0:
+        if not self.ctx.location.in_neighbor_iteration:
             if hindex is not None:
                 raise DuskSyntaxError(
-                    f"neighbor chain subscripts only allowed inside of an iteration"
+                    f"Invalid horizontal index for field '{field.sir.name}' "
+                    "outside of neighbor iteration!"
                 )
-            # if we are not in an interation space, h defaults to false and we're done here
-            return make_field_access_expr(expr.field_access_expr.name, [False, vindex])
+            return [False, vindex]
 
-        # possible cases
-        # no hor. index is given => default is assumed, i.e. True
-        # a chain is given:
-        #   - the chain matches the iteration space on top of the stack => True
-        #   - the chain does not match the iteartion space on top of the stack:
-        #       => check if the situation is ambigous, if not, the code is illegal
-        #       otherwise, check if the chain is equal to the first element of the
-        #       iteration space on the stack, if so, the offset is set to False,
-        #       otherwise, the code is illegal
+        neighbor_iteration = self.ctx.location.current_neighbor_iteration
+        field_dimension = self.ctx.location.get_field_dimension(field.sir)
 
-        neighbor_iteration = self.neighbor_iterations[-1]
+        # TODO: we should check that `field_dimension` is valid for
+        #       the current neighbor iteration(s?)
 
         if hindex is None:
-            if neighbor_iteration[0] == neighbor_iteration[-1]:  # ambigous case
-                raise DuskSyntaxError(
-                    f"ambigous case, neighbor chain subscript needs to be given"
-                )
-            # FIXME: we should check location type of field to get _smart default_
-            return make_field_access_expr(expr.field_access_expr.name, [True, vindex])
+            if self.ctx.location.is_dense(field_dimension):
+                if self.ctx.location.is_ambiguous(neighbor_iteration):
+                    raise DuskSyntaxError(
+                        f"Field '{field.sir.name}' requires a horizontal index "
+                        "inside of ambiguous neighbor iteration!"
+                    )
 
-        # I believe if it's non-ambiguous, hindex can still be given optionally
-        hindex = self.location_chain(hindex)
-        # FIXME: check if `hindex` is valid for this field's location type
+                return [field_dimension[0] == neighbor_iteration[-1], vindex]
+            return [True, vindex]
+
+        # TODO: check if `hindex` is valid for this field's location type
 
         if len(hindex) == 1:
             if neighbor_iteration[0] != hindex[0]:
                 raise DuskSyntaxError(
-                    f"neighbor chain subscript does not match start of chain"
+                    f"Invalid horizontal offset for field '{field.sir.name}'!"
                 )
-            return make_field_access_expr(expr.field_access_expr.name, [False, vindex])
+            return [False, vindex]
 
         if hindex != neighbor_iteration:
-            raise DuskSyntaxError(f"neighbor chain subscript does not match chain")
+            raise DuskSyntaxError(
+                f"Invalid horizontal offset for field '{field.sir.name}'!"
+            )
 
-        return make_field_access_expr(expr.field_access_expr.name, [True, vindex])
+        return [True, vindex]
 
     @transform(
         OneOf(
             BinOp(
-                # FIXME: support flexible vertical iteration variables
-                left=name("k"),
+                left=name(Capture(str).to("name")),
                 op=Capture(OneOf(Add, Sub)).to("vop"),
                 right=Constant(value=Capture(int).to("vindex"), kind=None),
             ),
-            name("k"),
+            name(Capture(str).to("name")),
         ),
     )
-    def relative_vertical_offset(self, vindex: int = 0, vop=Add()):
+    def relative_vertical_offset(self, name: str, vindex: int = 0, vop=Add()):
+        if not isinstance(
+            self.ctx.scope.current_scope.fetch(name), VerticalIterationVariable
+        ):
+            raise DuskSyntaxError(
+                f"'{name}' isn't a vertical iteration variable!", name
+            )
         return -vindex if isinstance(vop, Sub) else vindex
 
     @transform(
@@ -543,7 +517,7 @@ class Grammar:
             right=Capture(expr).to("right"),
         )
     )
-    def binop(self, left: expr, op: Any, right: expr):
+    def binop(self, left: expr, op: t.Any, right: expr):
         py_binops_to_sir_binops = {
             Add: "+",
             Sub: "-",
@@ -566,7 +540,7 @@ class Grammar:
             values=Capture(Repeat(expr)).to("values"),
         )
     )
-    def boolop(self, op, values: _List):
+    def boolop(self, op, values: t.List):
         py_boolops_to_sir_boolops = {And: "&&", Or: "||"}
         op = py_boolops_to_sir_boolops[type(op)]
 
@@ -597,7 +571,7 @@ class Grammar:
             GtE: ">=",
         }
         if type(op) not in py_compare_to_sir_compare.keys():
-            raise DuskSyntaxError(f"Unsupported comparison operator '{op}'", op)
+            raise DuskSyntaxError(f"Unsupported comparison operator '{op}'!", op)
         op = py_compare_to_sir_compare[type(op)]
         return make_binary_operator(self.expression(left), op, self.expression(right))
 
@@ -623,13 +597,16 @@ class Grammar:
     )
     def funcall(self, name: str, node: Call):
         # TODO: bad hardcoded string
-        if name == "reduce":
-            return self.reduction(node)
+        if name == "reduce_over":
+            return self.reduce_over(node)
+
+        if name in {"sum_over", "min_over", "max_over"}:
+            return self.short_reduce_over(node)
 
         if name in self.unary_math_functions or name in self.binary_math_functions:
             return self.math_function(node)
 
-        raise DuskSyntaxError(f"unrecognized function call '{name}'", node)
+        raise DuskSyntaxError(f"Unrecognized function call '{name}'!", node)
 
     unary_math_functions = {f.__name__ for f in __UNARY_MATH_FUNCTIONS__}
     binary_math_functions = {f.__name__ for f in __BINARY_MATH_FUNCTIONS__}
@@ -641,51 +618,129 @@ class Grammar:
             keywords=EmptyList,
         )
     )
-    def math_function(self, name: str, args: _List):
+    def math_function(self, name: str, args: t.List):
 
         if name in self.unary_math_functions:
             if len(args) != 1:
-                raise DuskSyntaxError(f"function '{name}' takes exactly one argument")
+                raise DuskSyntaxError(f"Function '{name}' takes exactly one argument!")
             return make_fun_call_expr(
                 f"gridtools::dawn::math::{name}", [self.expression(args[0])]
             )
 
         if name in self.binary_math_functions:
             if len(args) != 2:
-                raise DuskSyntaxError(f"function '{name}' takes exactly two arguments")
+                raise DuskSyntaxError(f"Function '{name}' takes exactly two arguments!")
             return make_fun_call_expr(
                 f"gridtools::dawn::math::{name}",
                 [self.expression(arg) for arg in args],
             )
 
-        raise DuskSyntaxError(f"unrecognized function call")
+        raise DuskSyntaxError(f"Unrecognized function call '{name}'!")
 
-    # TODO: bad hardcoded string
     @transform(
-        Call(func=name("reduce"), args=Capture(list).to("args"), keywords=EmptyList)
+        Call(
+            # TODO: bad hardcoded string
+            func=name("reduce_over"),
+            args=FixedList(
+                Capture(expr).to("neighborhood"),
+                Capture(expr).to("expr"),
+                name(Capture(str).to("op")),
+            ),
+            keywords=Repeat(
+                keyword(
+                    arg=Capture(str).append("kwargs_keys"),
+                    value=Capture(expr).append("kwargs_values"),
+                )
+            ),
+        ),
     )
-    def reduction(self, args: _List):
-        # FIXME: enrich matcher framework, so we can simplify this
-        if not 4 <= len(args) <= 5:
-            raise DuskSyntaxError(
-                f"Reduction takes 4 or 5 arguments, got {len(args)}!", args
+    def reduce_over(
+        self,
+        expr: expr,
+        neighborhood: expr,
+        op: str,
+        kwargs_keys: t.List[str],
+        kwargs_values: t.List[expr],
+    ):
+
+        return self.reduction(expr, neighborhood, op, kwargs_keys, kwargs_values)
+
+    @transform(
+        Call(
+            func=name(
+                # TODO: bad hardcoded string
+                Capture(OneOf("sum_over", "min_over", "max_over")).to("short_cut_name")
+            ),
+            args=FixedList(Capture(expr).to("neighborhood"), Capture(expr).to("expr"),),
+            keywords=Repeat(
+                keyword(
+                    arg=Capture(str).append("kwargs_keys"),
+                    value=Capture(expr).append("kwargs_values"),
+                )
+            ),
+        ),
+    )
+    def short_reduce_over(
+        self,
+        expr: expr,
+        neighborhood: expr,
+        short_cut_name: str,
+        kwargs_keys: t.List[str],
+        kwargs_values: t.List[expr],
+    ):
+        short_cut_to_op_map = {"sum_over": "sum", "min_over": "min", "max_over": "max"}
+        op = short_cut_to_op_map[short_cut_name]
+
+        return self.reduction(expr, neighborhood, op, kwargs_keys, kwargs_values)
+
+    def reduction(
+        self,
+        expr: expr,
+        neighborhood: expr,
+        op: str,
+        kwargs_keys: t.List[str],
+        kwargs_values: t.List[expr],
+    ):
+        kwargs = dict(zip(kwargs_keys, kwargs_values))
+        assert len(kwargs) == len(kwargs_keys) == len(kwargs_values)
+
+        # TODO: what about these hard coded strings?
+        wrong_kwargs = kwargs.keys() - {"init", "weights"}
+        if 0 < len(wrong_kwargs):
+            raise DuskSyntaxError(f"Unsupported kwargs '{wrong_kwargs}' in reduction!")
+
+        neighborhood = self.location_chain(neighborhood)
+        with self.ctx.location.reduction(neighborhood):
+            expr = self.expression(expr)
+
+        op_map = {"sum": "+", "mul": "*", "min": "min", "max": "max"}
+        if not op in op_map:
+            raise DuskSyntaxError(f"Invalid operator '{op}' for reduction!")
+
+        if "init" in kwargs:
+            init = self.expression(kwargs["init"])
+        else:
+            # TODO: "min" and "max" are kinda stupid
+            # we should use something like this:
+            # https://en.cppreference.com/w/cpp/types/numeric_limits/max
+            # but for double it should be 1.79769e+308
+            # FIXME: probably breaks for int
+            init_map = {
+                "sum": "0",
+                "mul": "1",
+                "min": "9" * 400,
+                "max": "-" + ("9" * 400),
+            }
+            init = make_literal_access_expr(
+                init_map[op], sir.BuiltinType.TypeID.Value("Double")
             )
 
-        expr, op, init, chain, *weights = args
+        op = op_map[op]
 
-        if not does_match(Constant(value=str, kind=None), op):
-            raise DuskSyntaxError(f"Invalid operator for reduction '{op}'!", op)
+        weights = None
+        if "weights" in kwargs:
+            # TODO: check for `kwargs["weight"].ctx == Load`?
+            weights = [self.expression(weight) for weight in kwargs["weights"].elts]
 
-        if len(weights) == 1:
-            # TODO: `weights.ctx`` should be `Load`
-            weights = [self.expression(weight) for weight in weights[0].elts]
+        return make_reduction_over_neighbor_expr(op, expr, init, neighborhood, weights,)
 
-        location_chain = self.location_chain(chain)
-
-        self.neighbor_iterations.append(location_chain)
-        expr = self.expression(expr)
-        self.neighbor_iterations.pop()
-
-        return make_reduction_over_neighbor_expr(
-            op.value, expr, self.expression(init), location_chain, weights,
-        )

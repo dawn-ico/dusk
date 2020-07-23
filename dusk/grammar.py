@@ -134,13 +134,10 @@ class Grammar:
         return make_stencil(name, body, fields)
 
     @transform(
-        OneOf(
-            arg(
-                arg=Capture(str).to("name"),
-                annotation=Capture(expr).to("type"),
-                type_comment=None,
-            ),
-            AnnAssign(),
+        arg(
+            arg=Capture(str).to("name"),
+            annotation=Capture(expr).to("type"),
+            type_comment=None,
         )
     )
     def field_declaration(self, name: str, type: expr):
@@ -234,8 +231,8 @@ class Grammar:
             ),
         )
     )
-    # NOTE is this really the correct name for this matcher?
-    # x: Field[Edge] is matched by this, but I wouldn't call this an assignment
+    # NOTE that x: Field[Edge] is matched by this, even though this doesn't
+    #      really assign anything
     def assign(self, lhs: expr, rhs: expr, decl_type: expr = None):
         if decl_type is not None:
             # TODO implement locals

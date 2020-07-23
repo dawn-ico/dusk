@@ -141,8 +141,11 @@ class Grammar:
         )
     )
     def field_declaration(self, name: str, type: expr):
+        self.add_field_declaration(name, type, False)
+
+    def add_field_declaration(self, name: str, type: expr, is_temporary: bool):
         self.ctx.scope.current_scope.add(
-            name, DuskField(make_field(name, self.field_type(type)))
+            name, DuskField(make_field(name, self.field_type(type), is_temporary))
         )
 
     def type(self, node):
@@ -228,13 +231,17 @@ class Grammar:
             ),
         )
     )
+    # NOTE that x: Field[Edge] is matched by this, even though this doesn't
+    #      really assign anything
     def assign(self, lhs: expr, rhs: expr, decl_type: expr = None):
         if decl_type is not None:
-            # TODO: implement locals and temporary fields
-            raise NotImplementedError(
-                "Variable declarations currently not implemented in stencil bodies!"
-            )
-            # decl_type = self.type(decl_type)
+            # TODO implement locals
+            if not self.ctx.scope.current_scope.is_stencil_scope():
+                raise DuskSyntaxError(
+                    "temp field declarations only allowed on stencil scope"
+                )
+            self.add_field_declaration(lhs.id, decl_type, is_temporary=True)
+
         if rhs is not None:
             return make_assignment_stmt(self.expression(lhs), self.expression(rhs))
 

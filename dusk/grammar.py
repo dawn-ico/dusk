@@ -7,6 +7,7 @@ import dawn4py.serialization.SIR as sir
 from dawn4py.serialization.utils import (
     make_stencil,
     make_field,
+    make_vertical_field,
     make_field_dimensions_unstructured,
     make_ast,
     make_stmt,
@@ -144,9 +145,15 @@ class Grammar:
         self.add_field_declaration(name, type, False)
 
     def add_field_declaration(self, name: str, type: expr, is_temporary: bool):
-        self.ctx.scope.current_scope.add(
-            name, DuskField(make_field(name, self.field_type(type), is_temporary))
-        )
+        h_dim = self.field_type(type)
+        if h_dim is not None:
+            self.ctx.scope.current_scope.add(
+                name, DuskField(make_field(name, h_dim, is_temporary)),
+            )
+        else:
+            self.ctx.scope.current_scope.add(
+                name, DuskField(make_vertical_field(name, is_temporary)),
+            )
 
     def type(self, node):
         return dispatch({Subscript: self.field_type}, node)
@@ -154,14 +161,43 @@ class Grammar:
     @transform(
         Subscript(
             value=name("Field"),
-            slice=Index(value=Capture(_).to("location_chain")),
+            slice=Index(
+                value=OneOf(
+                    Tuple(
+                        elts=FixedList(
+                            Capture(OneOf(Compare, Name)).to("hindex"),
+                            Capture(Name).to("vindex"),
+                        ),
+                        ctx=Load,
+                    ),
+                    # FIXME: ensure built-ins (like `Edge`) aren't _shadowed_ by variables
+                    # TODO: hardcoded string
+                    Capture(OneOf(Compare, name(OneOf("Edge", "Cell", "Vertex")))).to(
+                        "hindex"
+                    ),
+                    Capture(Name).to("vindex"),
+                    None,
+                )
+            ),
             ctx=Load,
         )
     )
-    def field_type(self, location_chain: Index):
-        # TODO: do we need z-masks (last argument below)?
+    def field_type(self, hindex=None, vindex=None):
+        hindex = self.location_chain(hindex) if hindex is not None else None
+        if hindex is None and vindex is None:
+            raise DuskSyntaxError(
+                "field needs to either specify horizontal or vertical dimensions"
+            )
+        if vindex is not None:
+            if vindex.id != "K":
+                raise DuskSyntaxError(
+                    f"Invalid field type, received vertical '{name}' but only K is allowed"
+                )
+        if hindex is None:
+            return None
+
         return make_field_dimensions_unstructured(
-            self.location_chain(location_chain), 1
+            hindex, 1 if vindex is not None else 0
         )
 
     @transform(

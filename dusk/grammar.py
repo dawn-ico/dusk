@@ -191,7 +191,7 @@ class Grammar:
         if vindex is not None:
             if vindex.id != "K":
                 raise DuskSyntaxError(
-                    f"Invalid field type, received vertical '{name}' but only K is allowed"
+                    f"Invalid field type, received vertical '{vindex.id}' but only K is allowed"
                 )
         if hindex is None:
             return None
@@ -786,4 +786,3 @@ class Grammar:
             weights = [self.expression(weight) for weight in kwargs["weights"].elts]
 
         return make_reduction_over_neighbor_expr(op, expr, init, neighborhood, weights,)
-

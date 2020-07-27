@@ -186,7 +186,7 @@ class Grammar:
         hindex = self.location_chain(hindex) if hindex is not None else None
         if hindex is None and vindex is None:
             raise DuskSyntaxError(
-                "field needs to either specify horizontal or vertical dimensions"
+                "Field declaration needs to either specify horizontal or vertical dimensions"
             )
         if vindex is not None:
             if vindex.id != "K":

@@ -7,8 +7,8 @@ import dawn4py.serialization.SIR as sir
 from dawn4py.serialization.utils import (
     make_stencil,
     make_field,
-    make_vertical_field,
     make_field_dimensions_unstructured,
+    make_field_dimensions_vertical,
     make_ast,
     make_stmt,
     make_block_stmt,
@@ -142,62 +142,56 @@ class Grammar:
         )
     )
     def field_declaration(self, name: str, type: expr):
-        self.add_field_declaration(name, type, False)
+        self.add_field_declaration(name, self.field_type(type))
 
-    def add_field_declaration(self, name: str, type: expr, is_temporary: bool):
-        h_dim = self.field_type(type)
-        if h_dim is not None:
-            self.ctx.scope.current_scope.add(
-                name, DuskField(make_field(name, h_dim, is_temporary)),
-            )
-        else:
-            self.ctx.scope.current_scope.add(
-                name, DuskField(make_vertical_field(name, is_temporary)),
-            )
+    @transform(
+        AnnAssign(
+            target=name(Capture(str).to("name"), ctx=Store),
+            value=None,
+            annotation=Capture(expr).to("type"),
+            simple=1,
+        ),
+    )
+    def temporary_field_declaration(self, name: str, type: expr):
+        self.add_field_declaration(name, self.field_type(type), is_temporary=True)
+
+    def add_field_declaration(
+        self, name: str, type: sir.FieldDimensions, is_temporary: bool = False
+    ):
+        self.ctx.scope.current_scope.add(
+            name, DuskField(make_field(name, type, is_temporary)),
+        )
 
     def type(self, node):
         return dispatch({Subscript: self.field_type}, node)
 
     @transform(
         Subscript(
+            # TODO: hardcoded string
             value=name("Field"),
             slice=Index(
                 value=OneOf(
                     Tuple(
                         elts=FixedList(
                             Capture(OneOf(Compare, Name)).to("hindex"),
-                            Capture(Name).to("vindex"),
+                            name(Capture("K").to("vindex")),
                         ),
                         ctx=Load,
                     ),
-                    # FIXME: ensure built-ins (like `Edge`) aren't _shadowed_ by variables
-                    # TODO: hardcoded string
-                    Capture(OneOf(Compare, name(OneOf("Edge", "Cell", "Vertex")))).to(
-                        "hindex"
-                    ),
-                    Capture(Name).to("vindex"),
-                    None,
-                )
+                    name(Capture("K").to("vindex")),
+                    Capture(OneOf(Compare, Name)).to("hindex"),
+                ),
             ),
             ctx=Load,
         )
     )
-    def field_type(self, hindex=None, vindex=None):
-        hindex = self.location_chain(hindex) if hindex is not None else None
-        if hindex is None and vindex is None:
-            raise DuskSyntaxError(
-                "Field declaration needs to either specify horizontal or vertical dimensions"
-            )
-        if vindex is not None:
-            if vindex.id != "K":
-                raise DuskSyntaxError(
-                    f"Invalid field type, received vertical '{vindex.id}' but only K is allowed"
-                )
+    def field_type(self, hindex: expr = None, vindex: str = None):
+
         if hindex is None:
-            return None
+            return make_field_dimensions_vertical()
 
         return make_field_dimensions_unstructured(
-            hindex, 1 if vindex is not None else 0
+            self.location_chain(hindex), 1 if vindex is not None else 0
         )
 
     @transform(

@@ -681,10 +681,9 @@ class Grammar:
         expr: expr,
         neighborhood: expr,
         op: str,
-        kwargs_keys: t.List[str],
-        kwargs_values: t.List[expr],
+        kwargs_keys: t.List[str] = [],
+        kwargs_values: t.List[expr] = [],
     ):
-
         return self.reduction(expr, neighborhood, op, kwargs_keys, kwargs_values)
 
     @transform(
@@ -707,8 +706,8 @@ class Grammar:
         expr: expr,
         neighborhood: expr,
         short_cut_name: str,
-        kwargs_keys: t.List[str],
-        kwargs_values: t.List[expr],
+        kwargs_keys: t.List[str] = [],
+        kwargs_values: t.List[expr] =[],
     ):
         short_cut_to_op_map = {"sum_over": "sum", "min_over": "min", "max_over": "max"}
         op = short_cut_to_op_map[short_cut_name]

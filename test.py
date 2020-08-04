@@ -235,7 +235,6 @@ def hv_field(
 ):
     with levels_downward as k:
         out = full + horizontal + vertical
-        out = sum_over(
-            Edge > Cell, horizontal_sparse, weights=[]
-        )  # small bug in short reduce over causes weights to be requried, fix in seperate PR!
+        out = reduce_over(Edge > Cell, horizontal_sparse, sum)
+        out = sum_over(Edge > Cell, horizontal_sparse)
 

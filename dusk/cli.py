@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from argparse import ArgumentParser, FileType
+from argparse import ArgumentParser
 from dusk import transpile, backend_map, default_backend
 
 
@@ -11,14 +11,14 @@ def main() -> None:
     argparser.add_argument("in_file", type=str)
     argparser.add_argument("-o", type=str, dest="out_file", default="out.cpp")
     argparser.add_argument(
+        "--dump-sir", default=False, action="store_true", help="dump sir to disk",
+    )
+    argparser.add_argument(
         "-b",
         type=str,
         dest="backend",
         choices=set(backend_map.keys()),
         default=default_backend,
-    )
-    argparser.add_argument(
-        "--dump-sir", default=False, action="store_true", help="dump sir to disk",
     )
 
     args = argparser.parse_args()

@@ -159,7 +159,7 @@ class Grammar:
         self, name: str, type: sir.FieldDimensions, is_temporary: bool = False
     ):
         self.ctx.scope.current_scope.add(
-            name, DuskField(make_field(name, type, is_temporary)),
+            name, DuskField(make_field(name, type, is_temporary))
         )
 
     def type(self, node):
@@ -173,13 +173,12 @@ class Grammar:
                 value=OneOf(
                     Tuple(
                         elts=FixedList(
-                            Capture(OneOf(Compare, Name)).to("hindex"),
-                            name(Capture("K").to("vindex")),
+                            Capture(_).to("hindex"), name(Capture("K").to("vindex")),
                         ),
                         ctx=Load,
                     ),
                     name(Capture("K").to("vindex")),
-                    Capture(OneOf(Compare, Name)).to("hindex"),
+                    Capture(_).to("hindex"),
                 ),
             ),
             ctx=Load,
@@ -707,7 +706,7 @@ class Grammar:
         neighborhood: expr,
         short_cut_name: str,
         kwargs_keys: t.List[str] = [],
-        kwargs_values: t.List[expr] =[],
+        kwargs_values: t.List[expr] = [],
     ):
         short_cut_to_op_map = {"sum_over": "sum", "min_over": "min", "max_over": "max"}
         op = short_cut_to_op_map[short_cut_name]

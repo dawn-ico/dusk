@@ -206,10 +206,14 @@ def other_vertical_iteration_variable(a: Field[Edge, K], b: Field[Edge, K]):
 @stencil
 def temp_field_demoted(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
     x: Field[Edge]
+    y: Field[Edge, K]
     with levels_downward:
         x = a + b
+        y = 5
         if x > 3:
             out = x
+        else:
+            out = y
 
 
 @stencil

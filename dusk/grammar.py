@@ -8,6 +8,7 @@ from dawn4py.serialization.utils import (
     make_stencil,
     make_field,
     make_field_dimensions_unstructured,
+    make_field_dimensions_vertical,
     make_ast,
     make_stmt,
     make_block_stmt,
@@ -166,15 +167,30 @@ class Grammar:
 
     @transform(
         Subscript(
+            # TODO: hardcoded string
             value=name("Field"),
-            slice=Index(value=Capture(_).to("location_chain")),
+            slice=Index(
+                value=OneOf(
+                    Tuple(
+                        elts=FixedList(
+                            Capture(_).to("hindex"), name(Capture("K").to("vindex")),
+                        ),
+                        ctx=Load,
+                    ),
+                    name(Capture("K").to("vindex")),
+                    Capture(_).to("hindex"),
+                ),
+            ),
             ctx=Load,
         )
     )
-    def field_type(self, location_chain: Index):
-        # TODO: do we need z-masks (last argument below)?
+    def field_type(self, hindex: expr = None, vindex: str = None):
+
+        if hindex is None:
+            return make_field_dimensions_vertical()
+
         return make_field_dimensions_unstructured(
-            self.location_chain(location_chain), 1
+            self.location_chain(hindex), 1 if vindex is not None else 0
         )
 
     @transform(
@@ -664,10 +680,9 @@ class Grammar:
         expr: expr,
         neighborhood: expr,
         op: str,
-        kwargs_keys: t.List[str],
-        kwargs_values: t.List[expr],
+        kwargs_keys: t.List[str] = [],
+        kwargs_values: t.List[expr] = [],
     ):
-
         return self.reduction(expr, neighborhood, op, kwargs_keys, kwargs_values)
 
     @transform(
@@ -690,8 +705,8 @@ class Grammar:
         expr: expr,
         neighborhood: expr,
         short_cut_name: str,
-        kwargs_keys: t.List[str],
-        kwargs_values: t.List[expr],
+        kwargs_keys: t.List[str] = [],
+        kwargs_values: t.List[expr] = [],
     ):
         short_cut_to_op_map = {"sum_over": "sum", "min_over": "min", "max_over": "max"}
         op = short_cut_to_op_map[short_cut_name]

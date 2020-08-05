@@ -19,24 +19,24 @@ from dusk.script import (
 
 @stencil
 def ICON_laplacian_diamond(
-    diff_multfac_smag: Field[Edge],
-    tangent_orientation: Field[Edge],
-    inv_primal_edge_length: Field[Edge],
-    inv_vert_vert_length: Field[Edge],
-    u_vert: Field[Vertex],
-    v_vert: Field[Vertex],
-    primal_normal_x: Field[Edge > Cell > Vertex],
-    primal_normal_y: Field[Edge > Cell > Vertex],
-    dual_normal_x: Field[Edge > Cell > Vertex],
-    dual_normal_y: Field[Edge > Cell > Vertex],
-    vn_vert: Field[Edge > Cell > Vertex],
-    vn: Field[Edge],
-    dvt_tang: Field[Edge],
-    dvt_norm: Field[Edge],
-    kh_smag_1: Field[Edge],
-    kh_smag_2: Field[Edge],
-    kh_smag: Field[Edge],
-    nabla2: Field[Edge],
+    diff_multfac_smag: Field[Edge, K],
+    tangent_orientation: Field[Edge, K],
+    inv_primal_edge_length: Field[Edge, K],
+    inv_vert_vert_length: Field[Edge, K],
+    u_vert: Field[Vertex, K],
+    v_vert: Field[Vertex, K],
+    primal_normal_x: Field[Edge > Cell > Vertex, K],
+    primal_normal_y: Field[Edge > Cell > Vertex, K],
+    dual_normal_x: Field[Edge > Cell > Vertex, K],
+    dual_normal_y: Field[Edge > Cell > Vertex, K],
+    vn_vert: Field[Edge > Cell > Vertex, K],
+    vn: Field[Edge, K],
+    dvt_tang: Field[Edge, K],
+    dvt_norm: Field[Edge, K],
+    kh_smag_1: Field[Edge, K],
+    kh_smag_2: Field[Edge, K],
+    kh_smag: Field[Edge, K],
+    nabla2: Field[Edge, K],
 ) -> None:
 
     with levels_upward:
@@ -108,7 +108,7 @@ def ICON_laplacian_diamond(
 
 
 @stencil
-def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
+def test(a: Field[Edge, K], b: Field[Edge, K], c: Field[Edge, K], d: Field[Vertex, K]):
     # here we test vertical regions
     with levels_downward[-5:] as k:
         # here we test basic expression
@@ -153,7 +153,7 @@ def test(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Vertex]):
 
 @stencil
 def h_offsets(
-    a: Field[Edge > Cell > Edge], b: Field[Edge], c: Field[Edge > Cell > Edge]
+    a: Field[Edge > Cell > Edge, K], b: Field[Edge, K], c: Field[Edge > Cell > Edge, K]
 ):
     with levels_upward:
         with sparse[Edge > Cell > Edge]:
@@ -165,7 +165,7 @@ def h_offsets(
 
 
 @stencil
-def v_offsets(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
+def v_offsets(a: Field[Edge, K], b: Field[Edge, K], c: Field[Edge, K]):
     with levels_upward as k:
         # classic central gradient access with "shortcut" on lhs (omit k)
         a[k] = b[k] + c[k]
@@ -174,7 +174,7 @@ def v_offsets(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
 
 @stencil
 def hv_offsets(
-    a: Field[Edge > Cell > Edge], b: Field[Edge], c: Field[Edge > Cell > Edge]
+    a: Field[Edge > Cell > Edge, K], b: Field[Edge, K], c: Field[Edge > Cell > Edge, K]
 ):
     with levels_upward as k:
         with sparse[Edge > Cell > Edge]:
@@ -184,14 +184,16 @@ def hv_offsets(
 
 
 @stencil
-def test_math(a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Edge]):
+def test_math(
+    a: Field[Edge, K], b: Field[Edge, K], c: Field[Edge, K], d: Field[Edge, K]
+):
     with levels_upward:
         a = a + sqrt(b) + cos(c)
         a = max(min(b, c), d)
 
 
 @stencil
-def other_vertical_iteration_variable(a: Field[Edge], b: Field[Edge]):
+def other_vertical_iteration_variable(a: Field[Edge, K], b: Field[Edge, K]):
 
     with levels_downward[5:-3] as extraordinary_vertical_iteration_variable_name:
         a = b + 1
@@ -202,16 +204,20 @@ def other_vertical_iteration_variable(a: Field[Edge], b: Field[Edge]):
 
 
 @stencil
-def temp_field_demoted(a: Field[Edge], b: Field[Edge], out: Field[Edge]):
+def temp_field_demoted(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
     x: Field[Edge]
+    y: Field[Edge, K]
     with levels_downward:
         x = a + b
+        y = 5
         if x > 3:
             out = x
+        else:
+            out = y
 
 
 @stencil
-def temp_field(a: Field[Edge], b: Field[Edge], out: Field[Edge]):
+def temp_field(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
     x: Field[Edge]
     with levels_downward as k:
         x = 1  # stricly necessary in dawn
@@ -221,4 +227,18 @@ def temp_field(a: Field[Edge], b: Field[Edge], out: Field[Edge]):
             x = b
     with levels_downward as k:
         out = x
+
+
+@stencil
+def hv_field(
+    out: Field[Edge, K],
+    full: Field[Edge, K],
+    horizontal: Field[Edge],
+    horizontal_sparse: Field[Edge > Cell],
+    vertical: Field[K],
+):
+    with levels_downward as k:
+        out = full + horizontal + vertical
+        out = reduce_over(Edge > Cell, horizontal_sparse, sum)
+        out = sum_over(Edge > Cell, horizontal_sparse)
 

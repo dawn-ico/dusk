@@ -242,3 +242,31 @@ def hv_field(
         out = reduce_over(Edge > Cell, horizontal_sparse, sum)
         out = sum_over(Edge > Cell, horizontal_sparse)
 
+
+@stencil
+def compound_assignment(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
+    with levels_upward:
+        # Add
+        a += b
+        # Sub
+        b -= c
+        # Mult
+        c *= a
+        # Div
+        a /= b
+        # Mod
+        b %= c
+        # LShift
+        a <<= b
+        # RShift
+        b >>= c
+        # BitOr
+        c |= a
+        # BitXor
+        a ^= b
+        # BitAnd
+        b &= c
+        # FloorDiv
+        # unsupported!
+        # MatMult
+        # unsupported!

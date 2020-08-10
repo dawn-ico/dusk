@@ -250,14 +250,44 @@ class Grammar:
         return sir_stmts
 
     @transform(
-        Assign(
-            targets=FixedList(Capture(expr).to("lhs")),
-            value=Capture(expr).to("rhs"),
-            type_comment=None,
+        OneOf(
+            Assign(
+                targets=FixedList(Capture(expr).to("lhs")),
+                value=Capture(expr).to("rhs"),
+                type_comment=None,
+            ),
+            AugAssign(
+                target=Capture(expr).to("lhs"),
+                op=Capture(operator).to("op"),
+                value=Capture(expr).to("rhs"),
+            ),
         ),
     )
-    def assign(self, lhs: expr, rhs: expr):
-        return make_assignment_stmt(self.expression(lhs), self.expression(rhs))
+    def assign(self, lhs: expr, rhs: expr, op: t.Optional[operator] = None):
+
+        py_assign_op_to_sir_assign_op = {
+            Add: "+=",
+            Sub: "-=",
+            Mult: "*=",
+            Div: "/=",
+            Mod: "%=",
+            LShift: "<<=",
+            RShift: ">>=",
+            BitOr: "|=",
+            BitXor: "^=",
+            BitAnd: "&=",
+        }
+
+        if op is None:
+            op = "="
+
+        elif type(op) in py_assign_op_to_sir_assign_op.keys():
+            op = py_assign_op_to_sir_assign_op[type(op)]
+
+        else:
+            raise DuskSyntaxError(f"Unsupported assignment operator '{op}'!", op)
+
+        return make_assignment_stmt(self.expression(lhs), self.expression(rhs), op)
 
     @transform(
         If(
@@ -763,4 +793,3 @@ class Grammar:
             weights = [self.expression(weight) for weight in kwargs["weights"].elts]
 
         return make_reduction_over_neighbor_expr(op, expr, init, neighborhood, weights,)
-

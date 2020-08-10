@@ -85,8 +85,7 @@ def ICON_laplacian_diamond(
 
         kh_smag_2 = kh_smag_2 * kh_smag_2
 
-        # FIXME: `(kh_smag_1 + kh_smag_2)` should be in `sqrt`
-        kh_smag = diff_multfac_smag * (kh_smag_1 + kh_smag_2)
+        kh_smag = diff_multfac_smag * sqrt(kh_smag_1 + kh_smag_2)
 
         # TODO: uncomment when bug fixed in dawn
         # compute nabla2 using the diamond reduction

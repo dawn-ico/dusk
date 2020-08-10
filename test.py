@@ -88,23 +88,25 @@ def ICON_laplacian_diamond(
         # FIXME: `(kh_smag_1 + kh_smag_2)` should be in `sqrt`
         kh_smag = diff_multfac_smag * (kh_smag_1 + kh_smag_2)
 
+        # TODO: uncomment when bug fixed in dawn
         # compute nabla2 using the diamond reduction
-        nabla2 = reduce_over(
-            Edge > Cell > Vertex,
-            4.0 * vn_vert,
-            sum,
-            weights=[
-                inv_primal_edge_length * inv_primal_edge_length,
-                inv_primal_edge_length * inv_primal_edge_length,
-                inv_vert_vert_length * inv_vert_vert_length,
-                inv_vert_vert_length * inv_vert_vert_length,
-            ],
-        )
+        # nabla2 = reduce_over(
+        # Edge > Cell > Vertex,
+        # 4.0 * vn_vert,
+        # sum,
+        # weights=[
+        # inv_primal_edge_length ** 2,
+        # inv_primal_edge_length ** 2,
+        # inv_vert_vert_length ** 2,
+        # inv_vert_vert_length ** 2,
+        # ],
+        # )
 
-        nabla2 = nabla2 - (
-            (8.0 * vn * inv_primal_edge_length * inv_primal_edge_length)
-            + (8.0 * vn * inv_vert_vert_length * inv_vert_vert_length)
-        )
+        # TODO: uncomment when bug fixed in dawn
+        # nabla2 = nabla2 - (
+        # (8.0 * vn * inv_primal_edge_length ** 2)
+        # + (8.0 * vn * inv_vert_vert_length ** 2)
+        # )
 
 
 @stencil
@@ -256,6 +258,8 @@ def compound_assignment(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
         a /= b
         # Mod
         b %= c
+        # Pow
+        c **= a
         # LShift
         a <<= b
         # RShift
@@ -270,3 +274,17 @@ def compound_assignment(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
         # unsupported!
         # MatMult
         # unsupported!
+
+
+@stencil
+def power_operator(
+    a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Edge > Cell]
+):
+    with levels_downward:
+        a = b ** c
+        if a == pow(b, c):
+            b = b ** c
+
+        # TODO: uncomment when bug fixed in dawn
+        # a = min_over(Edge > Cell, pow(d, 5), weights=[b ** 3, -1])
+

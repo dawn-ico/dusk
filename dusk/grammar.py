@@ -250,14 +250,52 @@ class Grammar:
         return sir_stmts
 
     @transform(
-        Assign(
-            targets=FixedList(Capture(expr).to("lhs")),
-            value=Capture(expr).to("rhs"),
-            type_comment=None,
+        OneOf(
+            Assign(
+                targets=FixedList(Capture(expr).to("lhs")),
+                value=Capture(expr).to("rhs"),
+                type_comment=None,
+            ),
+            AugAssign(
+                target=Capture(expr).to("lhs"),
+                op=Capture(operator).to("op"),
+                value=Capture(expr).to("rhs"),
+            ),
         ),
     )
-    def assign(self, lhs: expr, rhs: expr):
-        return make_assignment_stmt(self.expression(lhs), self.expression(rhs))
+    def assign(self, lhs: expr, rhs: expr, op: t.Optional[operator] = None):
+
+        py_assign_op_to_sir_assign_op = {
+            Add: "+=",
+            Sub: "-=",
+            Mult: "*=",
+            Div: "/=",
+            Mod: "%=",
+            LShift: "<<=",
+            RShift: ">>=",
+            BitOr: "|=",
+            BitXor: "^=",
+            BitAnd: "&=",
+        }
+
+        if op is None:
+            op = "="
+
+        elif isinstance(op, Pow):
+            op = "="
+            rhs = make_fun_call_expr(
+                "gridtools::dawn::math::pow",
+                [self.expression(lhs), self.expression(rhs)],
+            )
+            return make_assignment_stmt(self.expression(lhs), rhs, op)
+
+        elif type(op) in py_assign_op_to_sir_assign_op.keys():
+            op = py_assign_op_to_sir_assign_op[type(op)]
+
+        else:
+            raise DuskSyntaxError(f"Unsupported assignment operator '{op}'!", op)
+
+        return make_assignment_stmt(self.expression(lhs), self.expression(rhs), op)
 
     @transform(
         If(
@@ -534,7 +572,7 @@ class Grammar:
     @transform(
         BinOp(
             left=Capture(expr).to("left"),
-            op=Capture(_).to("op"),
+            op=Capture(operator).to("op"),
             right=Capture(expr).to("right"),
         )
     )
@@ -550,10 +588,21 @@ class Grammar:
             BitXor: "^",
             BitAnd: "&",
         }
-        if type(op) not in py_binops_to_sir_binops.keys():
+
+        if type(op) in py_binops_to_sir_binops.keys():
+            op = py_binops_to_sir_binops[type(op)]
+            return make_binary_operator(
+                self.expression(left), op, self.expression(right)
+            )
+
+        elif isinstance(op, Pow):
+            return make_fun_call_expr(
+                "gridtools::dawn::math::pow",
+                [self.expression(left), self.expression(right)],
+            )
+
+        else:
             raise DuskSyntaxError(f"Unsupported binary operator '{op}'!", op)
-        op = py_binops_to_sir_binops[type(op)]
-        return make_binary_operator(self.expression(left), op, self.expression(right))
 
     @transform(
         BoolOp(
@@ -763,4 +812,3 @@ class Grammar:
             weights = [self.expression(weight) for weight in kwargs["weights"].elts]
 
         return make_reduction_over_neighbor_expr(op, expr, init, neighborhood, weights,)
-

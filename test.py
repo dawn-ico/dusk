@@ -19,16 +19,16 @@ from dusk.script import (
 
 @stencil
 def ICON_laplacian_diamond(
-    diff_multfac_smag: Field[Edge, K],
-    tangent_orientation: Field[Edge, K],
-    inv_primal_edge_length: Field[Edge, K],
-    inv_vert_vert_length: Field[Edge, K],
+    diff_multfac_smag: Field[K],
+    tangent_orientation: Field[Edge],
+    inv_primal_edge_length: Field[Edge],
+    inv_vert_vert_length: Field[Edge],
     u_vert: Field[Vertex, K],
     v_vert: Field[Vertex, K],
-    primal_normal_x: Field[Edge > Cell > Vertex, K],
-    primal_normal_y: Field[Edge > Cell > Vertex, K],
-    dual_normal_x: Field[Edge > Cell > Vertex, K],
-    dual_normal_y: Field[Edge > Cell > Vertex, K],
+    primal_normal_x: Field[Edge > Cell > Vertex],
+    primal_normal_y: Field[Edge > Cell > Vertex],
+    dual_normal_x: Field[Edge > Cell > Vertex],
+    dual_normal_y: Field[Edge > Cell > Vertex],
     vn_vert: Field[Edge > Cell > Vertex, K],
     vn: Field[Edge, K],
     dvt_tang: Field[Edge, K],
@@ -40,27 +40,23 @@ def ICON_laplacian_diamond(
 ) -> None:
 
     with levels_upward:
-
         # fill sparse dimension vn vert using the loop concept
         with sparse[Edge > Cell > Vertex]:
             vn_vert = u_vert * primal_normal_x + v_vert * primal_normal_y
 
         # dvt_tang for smagorinsky
-        dvt_tang = reduce_over(
+        dvt_tang = sum_over(
             Edge > Cell > Vertex,
             (u_vert * dual_normal_x) + (v_vert * dual_normal_y),
-            sum,
-            init=0.0,
             weights=[-1.0, 1.0, 0.0, 0.0],
         )
 
         dvt_tang = dvt_tang * tangent_orientation
 
         # dvt_norm for smagorinsky
-        dvt_norm = reduce_over(
+        dvt_norm = sum_over(
             Edge > Cell > Vertex,
             u_vert * dual_normal_x + v_vert * dual_normal_y,
-            sum,
             weights=[0.0, 0.0, -1.0, 1.0],
         )
 
@@ -75,35 +71,33 @@ def ICON_laplacian_diamond(
 
         kh_smag_1 = kh_smag_1 * kh_smag_1
 
-        kh_smag_2 = reduce_over(
-            Edge > Cell > Vertex, vn_vert, sum, weights=[0.0, 0.0, -1.0, 1.0]
+        kh_smag_2 = sum_over(
+            Edge > Cell > Vertex, vn_vert, weights=[0.0, 0.0, -1.0, 1.0]
         )
 
-        kh_smag_2 = (kh_smag_2 * inv_vert_vert_length) + (
+        kh_smag_2 = (kh_smag_2 * inv_vert_vert_length) - (
             dvt_tang * inv_primal_edge_length
         )
 
         kh_smag_2 = kh_smag_2 * kh_smag_2
 
-        # FIXME: `(kh_smag_1 + kh_smag_2)` should be in `sqrt`
-        kh_smag = diff_multfac_smag * (kh_smag_1 + kh_smag_2)
+        kh_smag = diff_multfac_smag * sqrt(kh_smag_1 + kh_smag_2)
 
         # compute nabla2 using the diamond reduction
-        nabla2 = reduce_over(
+        nabla2 = sum_over(
             Edge > Cell > Vertex,
             4.0 * vn_vert,
-            sum,
             weights=[
-                inv_primal_edge_length * inv_primal_edge_length,
-                inv_primal_edge_length * inv_primal_edge_length,
-                inv_vert_vert_length * inv_vert_vert_length,
-                inv_vert_vert_length * inv_vert_vert_length,
+                inv_primal_edge_length ** 2,
+                inv_primal_edge_length ** 2,
+                inv_vert_vert_length ** 2,
+                inv_vert_vert_length ** 2,
             ],
         )
 
         nabla2 = nabla2 - (
-            (8.0 * vn * inv_primal_edge_length * inv_primal_edge_length)
-            + (8.0 * vn * inv_vert_vert_length * inv_vert_vert_length)
+            (8.0 * vn * inv_primal_edge_length ** 2)
+            + (8.0 * vn * inv_vert_vert_length ** 2)
         )
 
 
@@ -241,4 +235,48 @@ def hv_field(
         out = full + horizontal + vertical
         out = reduce_over(Edge > Cell, horizontal_sparse, sum)
         out = sum_over(Edge > Cell, horizontal_sparse)
+
+
+@stencil
+def compound_assignment(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
+    with levels_upward:
+        # Add
+        a += b
+        # Sub
+        b -= c
+        # Mult
+        c *= a
+        # Div
+        a /= b
+        # Mod
+        b %= c
+        # Pow
+        c **= a
+        # LShift
+        a <<= b
+        # RShift
+        b >>= c
+        # BitOr
+        c |= a
+        # BitXor
+        a ^= b
+        # BitAnd
+        b &= c
+        # FloorDiv
+        # unsupported!
+        # MatMult
+        # unsupported!
+
+
+@stencil
+def power_operator(
+    a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Edge > Cell]
+):
+    with levels_downward:
+        a = b ** c
+        if a == pow(b, c):
+            b = b ** c
+
+        # TODO: uncomment when bug fixed in dawn
+        # a = min_over(Edge > Cell, pow(d, 5), weights=[b ** 3, -1])
 

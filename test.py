@@ -4,14 +4,18 @@ from dusk.script import (
     Edge,
     Cell,
     Vertex,
-    forward,
-    backward,
-    neighbors,
-    reduce,
+    levels_upward,
+    levels_downward,
+    sparse,
+    reduce_over,
+    sum_over,
+    min_over,
+    max_over,
     sqrt,
     cos,
     min,
     max,
+    K,
 )
 
 # TODO better way to import math funs?

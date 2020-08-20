@@ -15,6 +15,7 @@ __all__ = [
     "levels_downward",
     "sparse",
     "reduce_over",
+    "mul",
     "sum_over",
     "min_over",
     "max_over",
@@ -67,6 +68,11 @@ def reduce_over(
 
 
 def sum_over(location_chain: type, expr: float, /, *, init=None, weights=None) -> float:
+    raise NotImplementedError
+
+
+# for reductions with a multiplication operator
+def mul(x: float, y: float) -> float:
     raise NotImplementedError
 
 

@@ -1,7 +1,12 @@
 name: Run tests
 
 on:
-  workflow_dispatch
+  workflow_dispatch: # allows manual triggering
+  push:
+    branches: [ $default-branch ]
+  pull_request:
+  schedule: # run every day at midnight
+    -cron: '0 0 * * *'
 
 jobs:
   build:

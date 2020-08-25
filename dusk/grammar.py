@@ -48,11 +48,11 @@ from dusk.semantics import (
     VerticalIterationVariable,
     DuskContextHelper,
 )
-from dusk.script import (
-    stencil as stencil_decorator,
-    __LOCATION_TYPES__,
-    __UNARY_MATH_FUNCTIONS__,
-    __BINARY_MATH_FUNCTIONS__,
+from dusk.script import stencil as stencil_decorator
+from dusk.script.stubs import (
+    LOCATION_TYPES,
+    UNARY_MATH_FUNCTIONS,
+    BINARY_MATH_FUNCTIONS,
 )
 from dusk.errors import DuskInternalError, DuskSyntaxError
 from dusk.util import pprint_matcher as pprint
@@ -208,7 +208,7 @@ class Grammar:
 
     @transform(Capture(str).to("name"))
     def location_type(self, name: str):
-        location_names = {l.__name__ for l in __LOCATION_TYPES__}
+        location_names = {l.__name__ for l in LOCATION_TYPES}
 
         if name not in location_names:
             raise DuskSyntaxError(f"Invalid location type '{name}'!", name)
@@ -678,8 +678,8 @@ class Grammar:
 
         raise DuskSyntaxError(f"Unrecognized function call '{name}'!", node)
 
-    unary_math_functions = {f.__name__ for f in __UNARY_MATH_FUNCTIONS__}
-    binary_math_functions = {f.__name__ for f in __BINARY_MATH_FUNCTIONS__}
+    unary_math_functions = {f.__name__ for f in UNARY_MATH_FUNCTIONS}
+    binary_math_functions = {f.__name__ for f in BINARY_MATH_FUNCTIONS}
 
     @transform(
         Call(

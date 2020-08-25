@@ -57,7 +57,7 @@ def h_offsets(
 ):
     with levels_upward:
         with sparse[Edge > Cell > Edge]:
-            a = b[Edge] + c  # no offsets, defaults to True
+            a = b[Edge > Cell > Edge] + c  # no offsets, defaults to Edge > Cell > Edge
             a = (
                 b[Edge > Cell > Edge] + c[Edge > Cell > Edge]
             )  # verbose version of the above

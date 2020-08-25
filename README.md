@@ -37,7 +37,7 @@ dusk --help
 
 ## Overview
 - [tests/stencils](tests/stencils) - Examples of the dusk eDSL
-- [dusk/script/__init__.py](dusk/script/__init__.py) - Contains definitions & mocks for dusk
+- [dusk/script/\_\_init\_\_.py](dusk/script/__init__.py) - Contains definitions & mocks for dusk
 - [dusk/cli.py](dusk/cli.py) - Implements a basic command line interface to compile dusk stencils
 - [dusk/transpile.py](dusk/transpile.py) - Provides a programmatic interface to compile dusk stencils
 - [dusk/grammar.py](dusk/grammar.py) - Implements most of the transformations for Python AST to SIR utilizing the matching framework

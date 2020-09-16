@@ -1,8 +1,8 @@
 from test_util import transpile_and_validate
-from nh_diffusion import ICON_laplacian_diamond
-from nh_diffusion_fvm import ICON_laplacian_fvm
+from laplacian_fd import laplacian_fd
+from laplacian_fvm import laplacian_fvm
 
 
 def test_examples():
-    transpile_and_validate(ICON_laplacian_diamond)
-    transpile_and_validate(ICON_laplacian_fvm)
+    transpile_and_validate(laplacian_fd)
+    transpile_and_validate(laplacian_fvm)

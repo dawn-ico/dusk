@@ -2,12 +2,10 @@ from dusk.script import *
 
 
 @stencil
-def ICON_laplacian_fvm(
+def laplacian_fvm(
     vec: Field[Edge, K],
     div_vec: Field[Cell, K],
     rot_vec: Field[Vertex, K],
-    nabla2t1_vec: Field[Edge, K],
-    nabla2t2_vec: Field[Edge, K],
     nabla2_vec: Field[Edge, K],
     primal_edge_length: Field[Edge],
     dual_edge_length: Field[Edge],
@@ -15,6 +13,9 @@ def ICON_laplacian_fvm(
     geofac_rot: Field[Vertex > Edge],
     geofac_div: Field[Cell > Edge],
 ) -> None:
+
+    nabla2t1_vec: Field[Edge, K]
+    nabla2t2_vec: Field[Edge, K]
 
     with levels_upward:
 

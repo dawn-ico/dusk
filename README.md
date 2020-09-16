@@ -36,7 +36,7 @@ dusk --help
 ```
 
 ## Overview
-- [tests/stencils](tests/stencils) - Examples of the dusk eDSL
+- [tests/examples/](tests/examples/) - Examples of the dusk eDSL
 - [dusk/script/\_\_init\_\_.py](dusk/script/__init__.py) - Contains definitions & mocks for dusk
 - [dusk/cli.py](dusk/cli.py) - Implements a basic command line interface to compile dusk stencils
 - [dusk/transpile.py](dusk/transpile.py) - Provides a programmatic interface to compile dusk stencils

@@ -27,17 +27,17 @@ def sparse_order_2_fill(
     with levels_upward:
 
         with sparse[Vertex > Edge]:
-            ve1 = edge + 5 * ve2
+            ve1 = edge + 5 * ve2 + log(vertex)
         with sparse[Vertex > Cell]:
             vc = cell - 6
         with sparse[Edge > Vertex]:
             ev1 = vertex * 7 + ev2
         with sparse[Edge > Cell]:
-            ec = cell / 8
+            ec = cell / 8 / sin(edge)
         with sparse[Cell > Vertex]:
-            cv1 = max(vertex ** 9, cv2)
+            cv1 = max(max(vertex ** 9, cv2), cell)
         with sparse[Cell > Edge]:
-            ce = sqrt(edge)
+            ce = sqrt(edge ** 2 + cell ** 2)
 
 
 @stencil

@@ -13,26 +13,29 @@ def sparse_order_2_fill(
     vertex: Field[Vertex],
     edge: Field[Edge, K],
     cell: Field[Cell],
-    ve: Field[Vertex > Edge, K],
+    ve1: Field[Vertex > Edge, K],
+    ve2: Field[Vertex > Edge, K],
     vc: Field[Vertex > Cell, K],
-    ev: Field[Edge > Vertex, K],
+    ev1: Field[Edge > Vertex, K],
+    ev2: Field[Edge > Vertex, K],
     ec: Field[Edge > Cell, K],
-    cv: Field[Cell > Vertex, K],
+    cv1: Field[Cell > Vertex, K],
+    cv2: Field[Cell > Vertex, K],
     ce: Field[Cell > Edge, K],
 ):
 
     with levels_upward:
 
         with sparse[Vertex > Edge]:
-            ve = edge + 5
+            ve1 = edge + 5 * ve2
         with sparse[Vertex > Cell]:
             vc = cell - 6
         with sparse[Edge > Vertex]:
-            ev = vertex * 7
+            ev1 = vertex * 7 + ev2
         with sparse[Edge > Cell]:
             ec = cell / 8
         with sparse[Cell > Vertex]:
-            cv = vertex ** 9
+            cv1 = max(vertex ** 9, cv2)
         with sparse[Cell > Edge]:
             ce = sqrt(edge)
 
@@ -68,6 +71,11 @@ def fill_with_reduction(
         with sparse[Edge > Cell > Vertex]:
             sparse1 = sum_over(Vertex > Cell, cell)
             sparse2 = min_over(Vertex > Edge, edge)
+
+    with levels_upward:
+        with sparse[Edge > Cell > Vertex]:
+            sparse1 = sum_over(Edge > Vertex, vertex[Edge > Vertex])
+            sparse2 = sum_over(Edge > Cell, cell)
 
     with levels_upward:
         with sparse[Edge > Cell > Vertex]:

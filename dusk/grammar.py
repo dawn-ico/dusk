@@ -799,8 +799,8 @@ class Grammar:
             init_map = {
                 "sum": "0",
                 "mul": "1",
-                "min": "1.79769e+308",
-                "max": "-1.79769e+308",
+                "min": "1.79769313486231571e+308",
+                "max": "-1.79769313486231571e+308",
             }
             init = make_literal_access_expr(
                 init_map[op], sir.BuiltinType.TypeID.Value("Double")

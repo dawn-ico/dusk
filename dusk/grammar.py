@@ -789,16 +789,18 @@ class Grammar:
         if "init" in kwargs:
             init = self.expression(kwargs["init"])
         else:
-            # TODO: "min" and "max" are kinda stupid
+            # TODO: "min" and "max" are still kinda stupid
             # we should use something like this:
             # https://en.cppreference.com/w/cpp/types/numeric_limits/max
-            # but for double it should be 1.79769e+308
-            # FIXME: probably breaks for int
+            # the current solution is:
+            #   - appropriate for doubles
+            #   - okish for floats (may trip floating point exceptions but correct outcome)
+            #   - breaks for int (undefined behavior!)
             init_map = {
                 "sum": "0",
                 "mul": "1",
-                "min": "9" * 400,
-                "max": "-" + ("9" * 400),
+                "min": "1.79769313486231571e+308",
+                "max": "-1.79769313486231571e+308",
             }
             init = make_literal_access_expr(
                 init_map[op], sir.BuiltinType.TypeID.Value("Double")

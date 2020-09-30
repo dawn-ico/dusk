@@ -509,6 +509,8 @@ class Grammar:
         neighbor_iteration = self.ctx.location.current_neighbor_iteration
         field_dimension = self.ctx.location.get_field_dimension(field.sir)
 
+        # TODO: `vindex` is _non-sensical_ if the field is 2d
+
         # TODO: we should check that `field_dimension` is valid for
         #       the current neighbor iteration(s?)
 

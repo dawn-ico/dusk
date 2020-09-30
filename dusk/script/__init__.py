@@ -11,6 +11,7 @@ __all__ = [
     "Vertex",
     "K",
     "Field",
+    "IndexField",
     "levels_upward",
     "levels_downward",
     "sparse",
@@ -43,6 +44,12 @@ class K:
 
 
 class Field:
+    @classmethod
+    def __class_getitem__(cls, *args) -> type:
+        pass
+
+
+class IndexField:
     @classmethod
     def __class_getitem__(cls, *args) -> type:
         pass

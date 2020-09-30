@@ -1,7 +1,6 @@
 from __future__ import annotations
 import typing as t
 from ast import *
-from dusk.util import pprint_matcher as pprint
 
 import dawn4py.serialization.SIR as sir
 from dawn4py.serialization.utils import (

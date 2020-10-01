@@ -25,11 +25,9 @@ def various_expression(
             Edge > Cell > Vertex > Edge,
             sin(sparse_3d_field1)
             * pow(
-                edge_3d_field2[
-                    Edge > Cell > Vertex > Edge, edge_3d_index_field[Edge] + 1
-                ]
+                edge_3d_field2[Edge > Cell > Vertex > Edge, edge_3d_index_field + 1]
                 + 17,
-                sparse_3d_field2[edge_3d_index_field[Edge > Cell > Vertex > Edge] - 1],
+                sparse_3d_field2[edge_3d_index_field - 1],
             )
             / 5,
         )
@@ -38,24 +36,17 @@ def various_expression(
             Edge > Vertex > Cell > Edge,
             tan(
                 sparse_3d_field3[
-                    Edge > Vertex > Cell > Edge,
-                    sparse_3d_index_field3[Edge > Vertex > Cell > Edge, k] + 3,
+                    Edge > Vertex > Cell > Edge, sparse_3d_index_field3 + 3,
                 ]
             )
-            / edge_3d_field1[Edge, edge_3d_index_field[Edge > Vertex > Cell > Edge] + 1]
+            / edge_3d_field1[Edge, edge_3d_index_field + 1]
             + reduce_over(
                 Edge > Cell > Vertex > Edge,
                 min(sparse_3d_field1[sparse_3d_index_field1 - 1], edge_3d_field1[Edge])
                 - floor(
-                    edge_3d_field1[
-                        Edge > Cell > Vertex > Edge, edge_3d_index_field[Edge]
-                    ]
+                    edge_3d_field1[Edge > Cell > Vertex > Edge, edge_3d_index_field]
                 )
-                + log(
-                    edge_3d_field1[
-                        Edge, edge_3d_index_field[Edge > Cell > Vertex > Edge] - 2
-                    ]
-                ),
+                + log(edge_3d_field1[Edge, edge_3d_index_field - 2]),
                 mul,
                 init=2,
             ),
@@ -63,16 +54,10 @@ def various_expression(
         )
 
         with sparse[Edge > Cell > Vertex > Edge]:
-            sparse_3d_field1 = edge_3d_field1[
-                Edge, edge_3d_index_field[Edge > Cell > Vertex > Edge] + 2
-            ] - sum_over(
+            sparse_3d_field1 = edge_3d_field1[Edge, edge_3d_index_field + 2] - sum_over(
                 Edge > Vertex > Cell > Edge,
-                arcsin(sparse_3d_field3[sparse_3d_index_field3[k] - 1])
-                ** sqrt(
-                    edge_3d_field2[
-                        Edge, edge_3d_index_field[Edge > Vertex > Cell > Edge]
-                    ]
-                ),
+                arcsin(sparse_3d_field3[sparse_3d_index_field3 - 1])
+                ** sqrt(edge_3d_field2[Edge, edge_3d_index_field]),
             )
 
 
@@ -91,38 +76,34 @@ def index_fields_with_offsets(
 ):
 
     with levels_downward as k:
-        cell_3d_field1 = cell_3d_field2[cell_3d_index_field[k] + 1]
-        cell_3d_field1 = cell_3d_field2[cell_3d_index_field[k] + 0]
-        cell_3d_field1 = cell_3d_field2[cell_3d_index_field[k] - 1]
+        cell_3d_field1 = cell_3d_field2[cell_3d_index_field + 1]
+        cell_3d_field1 = cell_3d_field2[cell_3d_index_field + 0]
+        cell_3d_field1 = cell_3d_field2[cell_3d_index_field - 1]
 
         edge_3d_field = sum_over(
-            Edge > Cell > Vertex, sparse_3d_field1[sparse_3d_index_field1[k] + 10]
+            Edge > Cell > Vertex, sparse_3d_field1[sparse_3d_index_field1 + 10]
         )
 
         with sparse[Edge > Cell > Vertex]:
-            sparse_3d_field1 = edge_3d_field[sparse_3d_index_field1[k] - 0]
+            sparse_3d_field1 = edge_3d_field[sparse_3d_index_field1 - 0]
 
         edge_3d_field = sum_over(
-            Edge > Cell > Vertex, sparse_3d_field1[sparse_3d_index_field1[k] - 10]
+            Edge > Cell > Vertex, sparse_3d_field1[sparse_3d_index_field1 - 10]
         )
 
         edge_3d_field = sum_over(
-            Edge > Cell > Edge, sparse_3d_field2[edge_3d_index_field[Edge, k] - 3]
+            Edge > Cell > Edge, sparse_3d_field2[edge_3d_index_field - 3]
         )
 
         with sparse[Edge > Cell > Edge]:
-            sparse_3d_field2 = edge_3d_field[
-                Edge, edge_3d_index_field[Edge > Cell > Edge, k] + 1
-            ]
+            sparse_3d_field2 = edge_3d_field[Edge, edge_3d_index_field + 1]
 
         with sparse[Edge > Cell > Edge]:
-            sparse_3d_field2 = sparse_3d_field3[
-                edge_3d_index_field[Edge > Cell > Edge, k] - 1
-            ]
+            sparse_3d_field2 = sparse_3d_field3[edge_3d_index_field - 1]
 
         edge_3d_field = sum_over(
             Edge > Cell > Edge,
-            edge_3d_field[Edge > Cell > Edge, edge_3d_index_field[Edge, k] + 2],
+            edge_3d_field[Edge > Cell > Edge, edge_3d_index_field + 2],
         )
 
 
@@ -153,30 +134,30 @@ def various_dimensions_mix(
 
     with levels_downward[3:-5] as k:
         # 3d fields with 2d index fields
-        vertex_3d_field2 = vertex_3d_field1[vertex_2d_index_field[k]]
+        vertex_3d_field2 = vertex_3d_field1[vertex_2d_index_field]
         edge_3d_field2 = edge_3d_field1[edge_2d_index_field]
-        cell_3d_field2 = cell_3d_field1[cell_2d_index_field[k]]
+        cell_3d_field2 = cell_3d_field1[cell_2d_index_field]
 
         # 3d fields with 1d index fields
-        vertex_3d_field2 = vertex_3d_field1[any_1d_index_field[k]]
+        vertex_3d_field2 = vertex_3d_field1[any_1d_index_field]
         edge_3d_field2 = edge_3d_field1[any_1d_index_field]
-        cell_3d_field2 = cell_3d_field1[any_1d_index_field[k]]
+        cell_3d_field2 = cell_3d_field1[any_1d_index_field]
 
         # 2d fields with 3d index fields
         vertex_2d_field = vertex_3d_field1[vertex_3d_index_field]
-        edge_2d_field = edge_3d_field1[edge_3d_index_field[k]]
+        edge_2d_field = edge_3d_field1[edge_3d_index_field]
         cell_2d_field = cell_3d_field1[cell_3d_index_field]
 
     with levels_downward[:20] as levels:
         # 2d fields with 2d index fields
-        vertex_2d_field = vertex_3d_field1[vertex_2d_index_field[levels]]
+        vertex_2d_field = vertex_3d_field1[vertex_2d_index_field]
         edge_2d_field = edge_3d_field1[edge_2d_index_field]
-        cell_2d_field = cell_3d_field1[cell_2d_index_field[levels]]
+        cell_2d_field = cell_3d_field1[cell_2d_index_field]
 
         # 2d fields with 1d index fields
-        vertex_2d_field = vertex_3d_field1[any_1d_index_field[levels]]
+        vertex_2d_field = vertex_3d_field1[any_1d_index_field]
         edge_2d_field = edge_3d_field1[any_1d_index_field]
-        cell_2d_field = cell_3d_field1[any_1d_index_field[levels]]
+        cell_2d_field = cell_3d_field1[any_1d_index_field]
 
 
 @stencil
@@ -195,18 +176,18 @@ def sparse_index_fields(
     with levels_downward[2:50] as levels:
         # 3d sparse field with 3d sparse index field
         edge_3d_field = sum_over(
-            Edge > Cell > Vertex, sparse_3d_field1[sparse_3d_index_field1[levels]]
+            Edge > Cell > Vertex, sparse_3d_field1[sparse_3d_index_field1]
         )
 
         with sparse[Edge > Cell > Vertex]:
-            sparse_3d_field1 = edge_3d_field[sparse_3d_index_field1[levels]]
+            sparse_3d_field1 = edge_3d_field[sparse_3d_index_field1]
 
         cell_3d_field = max_over(
-            Cell > Vertex > Cell, sparse_3d_field2[sparse_3d_index_field2[levels]]
+            Cell > Vertex > Cell, sparse_3d_field2[sparse_3d_index_field2]
         )
 
         with sparse[Cell > Vertex > Cell]:
-            sparse_3d_field2 = cell_3d_field[Cell, sparse_3d_index_field2[levels]]
+            sparse_3d_field2 = cell_3d_field[Cell, sparse_3d_index_field2]
 
         # 3d sparse field with 2d sparse index field
         edge_3d_field[levels] = min_over(
@@ -228,21 +209,19 @@ def sparse_index_fields(
         # 2d sparse field with 3d sparse index field
         edge_2d_field = sum_over(
             Edge > Cell > Vertex,
-            sparse_3d_field1[sparse_3d_index_field1[levels]],
+            sparse_3d_field1[sparse_3d_index_field1],
             weights=[-1, -2, -3, -4],
         )
 
         with sparse[Edge > Cell > Vertex]:
-            sparse_3d_field1 = edge_2d_field[sparse_3d_index_field1[levels]]
+            sparse_3d_field1 = edge_2d_field[sparse_3d_index_field1]
 
         cell_2d_field = sum_over(
-            Cell > Vertex > Cell,
-            sparse_3d_field2[sparse_3d_index_field2[levels]],
-            init=-10,
+            Cell > Vertex > Cell, sparse_3d_field2[sparse_3d_index_field2], init=-10,
         )
 
         with sparse[Cell > Vertex > Cell]:
-            sparse_3d_field2 = cell_2d_field[Cell, sparse_3d_index_field2[levels]]
+            sparse_3d_field2 = cell_2d_field[Cell, sparse_3d_index_field2]
 
         # 2d sparse field with 2d sparse index field
         edge_2d_field = sum_over(

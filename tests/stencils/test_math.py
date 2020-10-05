@@ -1,9 +1,9 @@
 from dusk.script import *
-from test_util import transpile_and_validate
+from test_util import transpile, validate
 
 
 def test_math():
-    transpile_and_validate(math_stencil)
+    validate(transpile(math_stencil))
 
 
 @stencil

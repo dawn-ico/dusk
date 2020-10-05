@@ -1,14 +1,14 @@
 from dusk.script import *
-from test_util import transpile_and_validate
+from test_util import transpile, validate
 
 
 def test_field():
-    transpile_and_validate(temp_field)
-    transpile_and_validate(temp_field_demoted)
-    transpile_and_validate(hv_field)
-    transpile_and_validate(h_offsets)
-    transpile_and_validate(v_offsets)
-    transpile_and_validate(hv_offsets)
+    validate(transpile(temp_field))
+    validate(transpile(temp_field_demoted))
+    validate(transpile(hv_field))
+    validate(transpile(h_offsets))
+    validate(transpile(v_offsets))
+    validate(transpile(hv_offsets))
 
 
 @stencil

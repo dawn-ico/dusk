@@ -1,13 +1,13 @@
 from dusk.script import *
-from test_util import transpile_and_validate
+from test_util import transpile, validate
 
 
 def test_copy():
-    transpile_and_validate(copy_only_vertex)
-    transpile_and_validate(copy_only_edge)
-    transpile_and_validate(copy_only_cell)
-    transpile_and_validate(copy_all_separate)
-    transpile_and_validate(copy_all_together)
+    validate(transpile(copy_only_vertex))
+    validate(transpile(copy_only_edge))
+    validate(transpile(copy_only_cell))
+    validate(transpile(copy_all_separate))
+    validate(transpile(copy_all_together))
 
 
 @stencil

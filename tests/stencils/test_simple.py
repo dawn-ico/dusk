@@ -1,12 +1,12 @@
 from dusk.script import *
-from test_util import transpile_and_validate
+from test_util import transpile, validate
 
 
 def test_simple():
-    transpile_and_validate(control_flow)
-    transpile_and_validate(compound_assignment)
-    transpile_and_validate(power_operator)
-    transpile_and_validate(vertical_iteration_variable)
+    validate(transpile(control_flow))
+    validate(transpile(compound_assignment))
+    validate(transpile(power_operator))
+    validate(transpile(vertical_iteration_variable))
 
 
 @stencil

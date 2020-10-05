@@ -1,10 +1,10 @@
 from dusk.script import *
-from test_util import transpile_and_validate
+from test_util import transpile, validate
 
 
 def test_reduce():
-    transpile_and_validate(various_reductions)
-    transpile_and_validate(kw_args)
+    validate(transpile(various_reductions))
+    validate(transpile(kw_args))
 
 
 @stencil

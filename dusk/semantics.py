@@ -14,6 +14,7 @@ from dusk.errors import DuskSyntaxError, DuskInternalError
 @unique
 class SymbolKind(Enum):
     Field = auto()
+    IndexField = auto()
     VerticalIterationVariable = auto()
 
 
@@ -30,7 +31,12 @@ class VerticalIterationVariable(Symbol):
 @dataclass
 class Field(Symbol):
     kind: ClassVar[SymbolKind] = SymbolKind.Field
+    sir: sir.Field
 
+
+@dataclass
+class IndexField(Symbol):
+    kind: ClassVar[SymbolKind] = SymbolKind.IndexField
     sir: sir.Field
 
 

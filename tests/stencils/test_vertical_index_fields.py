@@ -1,13 +1,35 @@
 from dusk.script import *
-from test_util import transpile
+from test_util import transpile, validate
 
 
 def test_vertical_index_fields():
+    validate(transpile(simple_example))
     # FIXME: add validation again
     transpile(various_expression)
     transpile(index_fields_with_offsets)
     transpile(various_dimensions_mix)
     transpile(sparse_index_fields)
+
+
+@stencil
+def simple_example(
+    edge_3d_field1: Field[Edge, K],
+    edge_3d_field2: Field[Edge, K],
+    cell_3d_field: Field[Cell, K],
+    sparse_3d_field: Field[Edge > Cell > Vertex > Cell, K],
+    sparse_3d_index_field: IndexField[Edge > Cell > Vertex > Cell, K],
+    edge_3d_index_field: IndexField[Edge, K],
+    cell_3d_index_field: IndexField[Cell, K],
+):
+
+    with levels_upward:
+        edge_3d_field2 = edge_3d_field1[edge_3d_index_field + 1]
+
+        edge_3d_field1 = sum_over(
+            Edge > Cell > Vertex > Cell,
+            sparse_3d_field[sparse_3d_index_field - 1]
+            * cell_3d_field[cell_3d_index_field + 1],
+        )
 
 
 @stencil

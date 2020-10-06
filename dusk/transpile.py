@@ -46,5 +46,5 @@ def transpile(
         if write_sir:
             out_file.write(sir_to_json(sir))
         else:
-            out_code = compile(sir, backend=backend_map[backend])
+            out_code = compile(sir, groups = [], backend=backend_map[backend]) #TODO: default pass groups are bugged in Dawn, need to pass empty list of groups
             out_file.write(out_code)

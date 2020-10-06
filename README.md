@@ -35,6 +35,20 @@ The package will install a `dusk` command-line tool which can be used to compile
 dusk --help
 ```
 
+The main output of `dusk` is Dawn's SIR (in JSON format), which is intended to be piped to the tools in the Dawn's 
+toolchain in order to obtain generated code, e.g.
+
+```bash
+dusk ./tests/examples/laplacian_fvm.py | dawn-opt | dawn-codegen -b naive-ico
+```
+
+This allows to pass arguments to `dawn-opt` and `dawn-codegen` (for example to enable/configure optimizations).
+If one doesn't need such customization, a simpler way to obtain generated code is by using the `-generate-code` option together with backend selection (`-b` option). Example:
+
+```bash
+dusk ./tests/examples/laplacian_fd.py -generate-code -b ico-cuda
+```
+
 ## Overview
 - [tests/examples/](tests/examples/) - Examples of the dusk eDSL
 - [dusk/script/\_\_init\_\_.py](dusk/script/__init__.py) - Contains definitions & mocks for dusk

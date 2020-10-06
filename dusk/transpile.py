@@ -1,9 +1,10 @@
+from io import StringIO
 from typing import Iterator, List
 import ast
 from dusk.grammar import Grammar
 from dusk.errors import DuskSyntaxError
 
-from dawn4py import compile, CodeGenBackend
+from dawn4py import compile, CodeGenBackend, set_verbosity, LogLevel
 from dawn4py.serialization import pprint, make_sir, to_json as sir_to_json
 from dawn4py.serialization.SIR import GridType
 
@@ -25,7 +26,7 @@ def iter_stencils(module: ast.Module) -> Iterator[ast.AST]:
 
 
 def transpile(
-    in_path: str, out_path: str, backend: str = default_backend, dump_sir: bool = False
+    in_path: str, out_file: StringIO, backend: str = default_backend, write_sir: bool = True, verbose: bool = False
 ) -> None:
 
     with open(in_path, "r") as in_file:
@@ -37,14 +38,13 @@ def transpile(
         # TODO: handle errors in different stencils separately
         stencils = [grammar.stencil(node) for node in iter_stencils(in_ast)]
 
+        if(verbose):
+            set_verbosity(LogLevel.All)
+
         sir = make_sir(in_path, GridType.Value("Unstructured"), stencils)
 
-        if dump_sir:
-            out_name = os.path.splitext(out_path)[0]
-            with open(out_name + ".json", "w+") as f:
-                f.write(sir_to_json(sir))
-
-        out_code = compile(sir, backend=backend_map[backend])
-
-        with open(out_path, "w") as out_file:
+        if write_sir:
+            out_file.write(sir_to_json(sir))
+        else:
+            out_code = compile(sir, backend=backend_map[backend])
             out_file.write(out_code)

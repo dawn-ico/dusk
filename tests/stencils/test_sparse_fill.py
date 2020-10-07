@@ -7,7 +7,6 @@ def test_sparse_fill():
     transpile_and_validate(longer_fills)
     transpile_and_validate(fill_with_reduction)
     transpile_and_validate(ambiguous_fill)
-    transpile_and_validate(ambiguous_sparse_fill_bug)
 
 
 @stencil
@@ -99,14 +98,3 @@ def ambiguous_fill(
     with levels_downward:
         with sparse[Edge > Vertex > Edge]:
             sparse2 = edge2[Edge] - 4 * edge1[Edge > Vertex > Edge]
-
-
-@stencil
-def ambiguous_sparse_fill_bug(
-    sparse_field: Field[Edge > Vertex > Edge, K], edge: Field[Edge, K],
-):
-    with levels_downward:
-        # different location chain in sparse fill than `sparse_field`
-        with sparse[Edge > Cell > Edge]:
-            # invalid sparse write
-            sparse_field = edge[Edge > Cell > Edge]

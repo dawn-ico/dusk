@@ -13,6 +13,7 @@ class LocationInfo:
     def __init__(
         self, lineno: int, col_offset: int, end_lineno: int, end_col_offset: int
     ) -> None:
+        # TODO: filename?
         self.lineno = lineno
         self.col_offset = col_offset
         self.end_lineno = end_lineno
@@ -21,6 +22,9 @@ class LocationInfo:
     @classmethod
     def from_node(cls, node: AST):
         return cls(node.lineno, node.col_offset, node.end_lineno, node.end_col_offset)
+
+    def __str__(self):
+        return f"Line: {self.lineno} - {self.end_lineno}; Col: {self.col_offset} - {self.end_col_offset}"
 
 
 class DuskSyntaxError(Exception):
@@ -43,3 +47,5 @@ class DuskSyntaxError(Exception):
         if self.loc is None:
             self.loc = LocationInfo.from_node(node)
 
+    def __str__(self):
+        return f"DuskSyntaxError: {self.text}\nat {self.loc}\n({self.node})"

@@ -9,6 +9,7 @@ def test_field():
     transpile_and_validate(h_offsets)
     transpile_and_validate(v_offsets)
     transpile_and_validate(hv_offsets)
+    transpile_and_validate(non_sensical_vertical_index_in_2d_field)
 
 
 @stencil
@@ -81,3 +82,23 @@ def hv_offsets(
             a = b[Edge, k] + c
             a = b[Edge > Cell > Edge, k + 1] + c[Edge > Cell > Edge, k]
             a = b[Edge, k] + b[Edge, k - 1] + c[Edge > Cell > Edge]
+
+
+@stencil
+def non_sensical_vertical_index_in_2d_field(
+    edge_2d_field1: Field[Edge],
+    edge_2d_field2: Field[Edge],
+    cell_2d_field1: Field[Cell],
+    cell_2d_field2: Field[Cell],
+    vertex_2d_field1: Field[Vertex],
+    vertex_2d_field2: Field[Vertex],
+):
+
+    # FIXME: resolve this issue
+    with levels_upward as k:
+        # it doesn't make sense to specify the vertical offset for 2d fields
+        # generally, 2d fields are _problematic_ in vertical iteration spaces
+        edge_2d_field2 = edge_2d_field1[k]
+        # these should definitely be wrong
+        cell_2d_field2 = cell_2d_field1[k + 1]
+        vertex_2d_field2 = vertex_2d_field1[k - 1]

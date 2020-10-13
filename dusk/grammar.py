@@ -1,7 +1,6 @@
 from __future__ import annotations
 import typing as t
 from ast import *
-from dusk.util import pprint_matcher as pprint
 
 import dawn4py.serialization.SIR as sir
 from dawn4py.serialization.utils import (
@@ -509,6 +508,8 @@ class Grammar:
 
         neighbor_iteration = self.ctx.location.current_neighbor_iteration
         field_dimension = self.ctx.location.get_field_dimension(field.sir)
+
+        # TODO: `vindex` is _non-sensical_ if the field is 2d
 
         # TODO: we should check that `field_dimension` is valid for
         #       the current neighbor iteration(s?)

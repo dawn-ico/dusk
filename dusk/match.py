@@ -105,7 +105,7 @@ class OneOf(Matcher):
                 pass
 
         if not matched:
-            raise DuskSyntaxError("Encountered unrecognized node '{node}'!", node)
+            raise DuskSyntaxError(f"Encountered unrecognized node '{node}'!", node)
 
 
 def Optional(matcher) -> Matcher:

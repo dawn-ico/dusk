@@ -1,20 +1,20 @@
 from dusk.script import *
-from test_util import transpile_and_validate
+from test_util import transpile, validate
 
 
 def test_field():
-    transpile_and_validate(temp_field)
-    transpile_and_validate(temp_field_demoted)
-    transpile_and_validate(hv_field)
-    transpile_and_validate(h_offsets)
-    transpile_and_validate(v_offsets)
-    transpile_and_validate(hv_offsets)
-    transpile_and_validate(non_sensical_vertical_index_in_2d_field)
+    validate(transpile(temp_field))
+    validate(transpile(temp_field_demoted))
+    validate(transpile(hv_field))
+    validate(transpile(h_offsets))
+    validate(transpile(v_offsets))
+    validate(transpile(hv_offsets))
+    validate(transpile(redundant_vertical_index_in_2d_field))
 
 
 @stencil
 def temp_field(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
-    x: Field[Edge]
+    x: Field[Edge, K]
     with levels_downward as k:
         x = 1  # stricly necessary in dawn
         if a > 5:
@@ -27,7 +27,7 @@ def temp_field(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
 
 @stencil
 def temp_field_demoted(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
-    x: Field[Edge]
+    x: Field[Edge, K]
     y: Field[Edge, K]
     with levels_downward:
         x = a + b
@@ -85,7 +85,7 @@ def hv_offsets(
 
 
 @stencil
-def non_sensical_vertical_index_in_2d_field(
+def redundant_vertical_index_in_2d_field(
     edge_2d_field1: Field[Edge],
     edge_2d_field2: Field[Edge],
     cell_2d_field1: Field[Cell],
@@ -94,11 +94,7 @@ def non_sensical_vertical_index_in_2d_field(
     vertex_2d_field2: Field[Vertex],
 ):
 
-    # FIXME: resolve this issue
+    # TODO: should we change this?
     with levels_upward as k:
         # it doesn't make sense to specify the vertical offset for 2d fields
-        # generally, 2d fields are _problematic_ in vertical iteration spaces
         edge_2d_field2 = edge_2d_field1[k]
-        # these should definitely be wrong
-        cell_2d_field2 = cell_2d_field1[k + 1]
-        vertex_2d_field2 = vertex_2d_field1[k - 1]

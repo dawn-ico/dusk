@@ -1,12 +1,12 @@
 from dusk.script import *
-from test_util import transpile_and_validate
+from test_util import transpile, validate
 
 
 def test_sparse_fill():
-    transpile_and_validate(sparse_order_2_fill)
-    transpile_and_validate(longer_fills)
-    transpile_and_validate(fill_with_reduction)
-    transpile_and_validate(ambiguous_fill)
+    validate(transpile(sparse_order_2_fill))
+    validate(transpile(longer_fills))
+    validate(transpile(fill_with_reduction))
+    validate(transpile(ambiguous_fill))
 
 
 @stencil
@@ -63,7 +63,7 @@ def longer_fills(
 @stencil
 def fill_with_reduction(
     sparse1: Field[Edge > Cell > Vertex],
-    sparse2: Field[Edge > Cell > Vertex],
+    sparse2: Field[Edge > Cell > Vertex, K],
     vertex: Field[Vertex],
     edge: Field[Edge, K],
     cell: Field[Cell],
@@ -86,8 +86,8 @@ def fill_with_reduction(
 
 @stencil
 def ambiguous_fill(
-    sparse1: Field[Edge > Cell > Edge],
-    sparse2: Field[Edge > Vertex > Edge],
+    sparse1: Field[Edge > Cell > Edge, K],
+    sparse2: Field[Edge > Vertex > Edge, K],
     edge1: Field[Edge, K],
     edge2: Field[Edge, K],
 ):

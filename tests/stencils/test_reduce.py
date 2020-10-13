@@ -11,7 +11,7 @@ def test_reduce():
 def various_reductions(
     vertex: Field[Vertex],
     edge: Field[Edge, K],
-    cell: Field[Cell],
+    cell: Field[Cell, K],
     ve: Field[Vertex > Edge, K],
     vc: Field[Vertex > Cell, K],
     ev: Field[Edge > Vertex, K],

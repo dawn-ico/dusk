@@ -63,7 +63,7 @@ def longer_fills(
 @stencil
 def fill_with_reduction(
     sparse1: Field[Edge > Cell > Vertex],
-    sparse2: Field[Edge > Cell > Vertex],
+    sparse2: Field[Edge > Cell > Vertex, K],
     vertex: Field[Vertex],
     edge: Field[Edge, K],
     cell: Field[Cell],
@@ -86,8 +86,8 @@ def fill_with_reduction(
 
 @stencil
 def ambiguous_fill(
-    sparse1: Field[Edge > Cell > Edge],
-    sparse2: Field[Edge > Vertex > Edge],
+    sparse1: Field[Edge > Cell > Edge, K],
+    sparse2: Field[Edge > Vertex > Edge, K],
     edge1: Field[Edge, K],
     edge2: Field[Edge, K],
 ):

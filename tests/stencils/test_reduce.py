@@ -1,17 +1,17 @@
 from dusk.script import *
-from test_util import transpile_and_validate
+from test_util import transpile, validate
 
 
 def test_reduce():
-    transpile_and_validate(various_reductions)
-    transpile_and_validate(kw_args)
+    validate(transpile(various_reductions))
+    validate(transpile(kw_args))
 
 
 @stencil
 def various_reductions(
     vertex: Field[Vertex],
     edge: Field[Edge, K],
-    cell: Field[Cell],
+    cell: Field[Cell, K],
     ve: Field[Vertex > Edge, K],
     vc: Field[Vertex > Cell, K],
     ev: Field[Edge > Vertex, K],

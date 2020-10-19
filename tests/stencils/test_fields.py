@@ -1,19 +1,20 @@
 from dusk.script import *
-from test_util import transpile_and_validate
+from test_util import transpile, validate
 
 
 def test_field():
-    transpile_and_validate(temp_field)
-    transpile_and_validate(temp_field_demoted)
-    transpile_and_validate(hv_field)
-    transpile_and_validate(h_offsets)
-    transpile_and_validate(v_offsets)
-    transpile_and_validate(hv_offsets)
+    validate(transpile(temp_field))
+    validate(transpile(temp_field_demoted))
+    validate(transpile(hv_field))
+    validate(transpile(h_offsets))
+    validate(transpile(v_offsets))
+    validate(transpile(hv_offsets))
+    validate(transpile(redundant_vertical_index_in_2d_field))
 
 
 @stencil
 def temp_field(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
-    x: Field[Edge]
+    x: Field[Edge, K]
     with levels_downward as k:
         x = 1  # stricly necessary in dawn
         if a > 5:
@@ -26,7 +27,7 @@ def temp_field(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
 
 @stencil
 def temp_field_demoted(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
-    x: Field[Edge]
+    x: Field[Edge, K]
     y: Field[Edge, K]
     with levels_downward:
         x = a + b
@@ -81,3 +82,19 @@ def hv_offsets(
             a = b[Edge, k] + c
             a = b[Edge > Cell > Edge, k + 1] + c[Edge > Cell > Edge, k]
             a = b[Edge, k] + b[Edge, k - 1] + c[Edge > Cell > Edge]
+
+
+@stencil
+def redundant_vertical_index_in_2d_field(
+    edge_2d_field1: Field[Edge],
+    edge_2d_field2: Field[Edge],
+    cell_2d_field1: Field[Cell],
+    cell_2d_field2: Field[Cell],
+    vertex_2d_field1: Field[Vertex],
+    vertex_2d_field2: Field[Vertex],
+):
+
+    # TODO: should we change this?
+    with levels_upward as k:
+        # it doesn't make sense to specify the vertical offset for 2d fields
+        edge_2d_field2 = edge_2d_field1[k]

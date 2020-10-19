@@ -5,7 +5,7 @@ A minimal and lightweight front-end for dawn.
 Dusk translates a subset of Python code (a Python embedded domain specific language - eDSL) to SIR. Its purpose is to allow quick
 prototyping of dawn's unstructured features for internal experiments.
 
-Dusk is currently in an experimental state. Examples are available here: [tests/stencils](tests/stencils/)
+Dusk is currently in an experimental state. Examples are available here: [tests/examples/](tests/examples/)
 
 # Requirements
 

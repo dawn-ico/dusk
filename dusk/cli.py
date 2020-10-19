@@ -37,4 +37,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # TODO: add a test that the cli is properly installed & working
     main()

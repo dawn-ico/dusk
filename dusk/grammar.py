@@ -1,7 +1,6 @@
 from __future__ import annotations
 import typing as t
 from ast import *
-from dusk.util import pprint_matcher as pprint
 
 import dawn4py.serialization.SIR as sir
 from dawn4py.serialization.utils import (
@@ -22,7 +21,8 @@ from dawn4py.serialization.utils import (
     make_expr,
     make_literal_access_expr,
     make_var_access_expr,
-    make_field_access_expr,
+    make_unstructured_field_access_expr,
+    make_unstructured_offset,
     make_unary_operator,
     make_binary_operator,
     make_ternary_operator,
@@ -45,6 +45,7 @@ from dusk.semantics import (
     Symbol,
     SymbolKind,
     Field as DuskField,
+    IndexField as DuskIndexField,
     VerticalIterationVariable,
     DuskContextHelper,
 )
@@ -130,45 +131,52 @@ class Grammar:
             fields = [
                 symbol.sir
                 for symbol in self.ctx.scope.current_scope
-                if isinstance(symbol, DuskField)
+                if isinstance(symbol, (DuskField, DuskIndexField))
             ]
         return make_stencil(name, body, fields)
 
     @transform(
         arg(
             arg=Capture(str).to("name"),
-            annotation=Capture(expr).to("type"),
+            annotation=Capture(expr).to("field_type"),
             type_comment=None,
         )
     )
-    def field_declaration(self, name: str, type: expr):
-        self.add_field_declaration(name, self.field_type(type))
+    def field_declaration(self, name: str, field_type: expr):
+        self.add_field_declaration(name, field_type)
 
     @transform(
         AnnAssign(
             target=name(Capture(str).to("name"), ctx=Store),
             value=None,
-            annotation=Capture(expr).to("type"),
+            annotation=Capture(expr).to("field_type"),
             simple=1,
         ),
     )
-    def temporary_field_declaration(self, name: str, type: expr):
-        self.add_field_declaration(name, self.field_type(type), is_temporary=True)
+    def temporary_field_declaration(self, name: str, field_type: expr):
+        self.add_field_declaration(name, field_type, is_temporary=True)
 
     def add_field_declaration(
-        self, name: str, type: sir.FieldDimensions, is_temporary: bool = False
+        self, name: str, field_type: expr, is_temporary: bool = False
     ):
-        self.ctx.scope.current_scope.add(
-            name, DuskField(make_field(name, type, is_temporary))
-        )
+        field_type, hindex, vindex = self.field_type(field_type)
 
-    def type(self, node):
-        return dispatch({Subscript: self.field_type}, node)
+        assert field_type in {"Field", "IndexField"}
+        DuskFieldType = DuskField if field_type == "Field" else DuskIndexField
+
+        if hindex is not None:
+            dimensions = make_field_dimensions_unstructured(hindex, vindex)
+        else:
+            dimensions = make_field_dimensions_vertical()
+
+        self.ctx.scope.current_scope.add(
+            name, DuskFieldType(make_field(name, dimensions, is_temporary))
+        )
 
     @transform(
         Subscript(
             # TODO: hardcoded string
-            value=name("Field"),
+            value=name(Capture(OneOf("Field", "IndexField")).to("field_type")),
             slice=Index(
                 value=OneOf(
                     Tuple(
@@ -184,13 +192,11 @@ class Grammar:
             ctx=Load,
         )
     )
-    def field_type(self, hindex: expr = None, vindex: str = None):
-
-        if hindex is None:
-            return make_field_dimensions_vertical()
-
-        return make_field_dimensions_unstructured(
-            self.location_chain(hindex), 1 if vindex is not None else 0
+    def field_type(self, field_type: str, hindex: expr = None, vindex: str = None):
+        return (
+            field_type,
+            self.location_chain(hindex) if hindex is not None else None,
+            1 if vindex is not None else 0,
         )
 
     @transform(
@@ -474,8 +480,8 @@ class Grammar:
             raise DuskSyntaxError(
                 f"Invalid field access {name} outside of a vertical region!"
             )
-        return make_field_access_expr(
-            field.sir.name, self.field_index(index, field=field)
+        return make_unstructured_field_access_expr(
+            field.sir.name, *self.field_index(index, field=field)
         )
 
     @transform(
@@ -490,13 +496,15 @@ class Grammar:
             # FIXME: ensure built-ins (like `Edge`) aren't _shadowed_ by variables
             # TODO: hardcoded string
             Capture(OneOf(Compare, name(OneOf("Edge", "Cell", "Vertex")))).to("hindex"),
-            Capture(OneOf(BinOp, Name)).to("vindex"),
+            Capture(expr).to("vindex"),
             None,
         )
     )
     def field_index(self, field: DuskField, vindex=None, hindex=None):
 
-        vindex = self.relative_vertical_offset(vindex) if vindex is not None else 0
+        voffset, vbase = (
+            self.relative_vertical_offset(vindex) if vindex is not None else (0, None)
+        )
         hindex = self.location_chain(hindex) if hindex is not None else None
 
         if not self.ctx.location.in_neighbor_iteration:
@@ -505,10 +513,12 @@ class Grammar:
                     f"Invalid horizontal index for field '{field.sir.name}' "
                     "outside of neighbor iteration!"
                 )
-            return [False, vindex]
+            return make_unstructured_offset(False), voffset, vbase
 
         neighbor_iteration = self.ctx.location.current_neighbor_iteration
         field_dimension = self.ctx.location.get_field_dimension(field.sir)
+
+        # TODO: `vindex` is _non-sensical_ if the field is 2d
 
         # TODO: we should check that `field_dimension` is valid for
         #       the current neighbor iteration(s?)
@@ -521,8 +531,14 @@ class Grammar:
                         "inside of ambiguous neighbor iteration!"
                     )
 
-                return [field_dimension[0] == neighbor_iteration[-1], vindex]
-            return [True, vindex]
+                return (
+                    make_unstructured_offset(
+                        field_dimension[0] == neighbor_iteration[-1]
+                    ),
+                    voffset,
+                    vbase,
+                )
+            return make_unstructured_offset(True), voffset, vbase
 
         # TODO: check if `hindex` is valid for this field's location type
 
@@ -531,33 +547,52 @@ class Grammar:
                 raise DuskSyntaxError(
                     f"Invalid horizontal offset for field '{field.sir.name}'!"
                 )
-            return [False, vindex]
+            return make_unstructured_offset(False), voffset, vbase
 
         if hindex != neighbor_iteration:
             raise DuskSyntaxError(
                 f"Invalid horizontal offset for field '{field.sir.name}'!"
             )
 
-        return [True, vindex]
+        return make_unstructured_offset(True), voffset, vbase
 
     @transform(
         OneOf(
             BinOp(
-                left=name(Capture(str).to("name")),
+                left=name(Capture(str).to("base")),
                 op=Capture(OneOf(Add, Sub)).to("vop"),
-                right=Constant(value=Capture(int).to("vindex"), kind=None),
+                right=Constant(value=Capture(int).to("shift"), kind=None),
             ),
-            name(Capture(str).to("name")),
+            name(Capture(str).to("base")),
         ),
     )
-    def relative_vertical_offset(self, name: str, vindex: int = 0, vop=Add()):
-        if not isinstance(
-            self.ctx.scope.current_scope.fetch(name), VerticalIterationVariable
-        ):
+    def relative_vertical_offset(self, base: str, shift: int = 0, vop=Add()):
+        base = self.ctx.scope.current_scope.fetch(base)
+
+        if not isinstance(base, (VerticalIterationVariable, DuskIndexField)):
             raise DuskSyntaxError(
-                f"'{name}' isn't a vertical iteration variable!", name
+                f"'{base}' isn't a vertical iteration variable or index field!", base
             )
-        return -vindex if isinstance(vop, Sub) else vindex
+        if isinstance(base, DuskIndexField):
+            # TODO: check that `base` is valid in this context
+            #       * compatible neighbor iteration
+            #       * _correct_ usage (not clear what this entails)
+            base = base.sir.name
+            if (
+                self.ctx.location.in_neighbor_iteration
+                and self.ctx.location.is_ambiguous(
+                    self.ctx.location.current_neighbor_iteration
+                )
+            ):
+                raise DuskSyntaxError(
+                    f"Index field {base} used in ambiguous neighbor iteration!"
+                )
+        elif isinstance(base, VerticalIterationVariable):
+            base = None
+        else:
+            assert False
+
+        return (-shift if isinstance(vop, Sub) else shift), base
 
     @transform(
         UnaryOp(

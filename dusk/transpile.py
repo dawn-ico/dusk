@@ -26,7 +26,8 @@ def iter_stencils(module: ast.Module) -> Iterator[ast.AST]:
 
 
 def transpile(
-    in_path: str, out_file: StringIO, backend: str = default_backend, write_sir: bool = True, verbose: bool = False
+    in_path: str, out_sir_file: StringIO, out_gencode_file: StringIO, 
+    backend: str = default_backend, verbose: bool = False
 ) -> None:
 
     with open(in_path, "r") as in_file:
@@ -43,8 +44,8 @@ def transpile(
 
         sir = make_sir(in_path, GridType.Value("Unstructured"), stencils)
 
-        if write_sir:
-            out_file.write(sir_to_json(sir))
-        else:
-            out_code = compile(sir, groups = [], backend=backend_map[backend]) #TODO: default pass groups are bugged in Dawn, need to pass empty list of groups
-            out_file.write(out_code)
+        if out_sir_file is not None:
+            out_sir_file.write(sir_to_json(sir))
+        if out_gencode_file is not None:
+            code = compile(sir, groups = [], backend=backend_map[backend]) #TODO: default pass groups are bugged in Dawn, need to pass empty list of groups
+            out_gencode_file.write(code)

@@ -41,7 +41,7 @@ and a pipeable `dusk-front` tool:
 dusk-front --help
 ```
 
-The main output of `dusk-front` is Dawn's SIR (in JSON format), which is intended to be piped to the tools in the Dawn's toolchain in order to obtain generated code, e.g.
+The output of `dusk-front` is Dawn's SIR (in JSON format), which is intended to be piped to the tools in the Dawn's toolchain in order to obtain generated code, e.g.
 
 ```bash
 dusk-front ./tests/examples/laplacian_fvm.py | dawn-opt | dawn-codegen -b naive-ico
@@ -51,7 +51,7 @@ This allows to pass arguments to `dawn-opt` and `dawn-codegen` (for example to e
 If one doesn't need such customization, a simpler way to obtain generated code is by using the `dusk` tool, which also allows backend selection (`-b` option). Example:
 
 ```bash
-dusk -b ico-cuda ./tests/examples/laplacian_fd.py ./laplacian_fd_cuda.cpp
+dusk -b ico-cuda -o ./laplacian_fd_cuda.cpp ./tests/examples/laplacian_fd.py
 ```
 
 ## Overview

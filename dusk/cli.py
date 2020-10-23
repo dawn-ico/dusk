@@ -25,13 +25,14 @@ def main() -> None:
         help="Backend to use to generate code",
     )
     argparser.add_argument(
-        "-dump-sir",
+        "--dump-sir",
         default=False,
         action="store_true",
         help="Dumps (also) sir to <base_in_file>.json",
     )
     argparser.add_argument(
-        "-verbose",
+        "-v",
+        "--verbose",
         dest="verbose",
         default=False,
         action="store_true",

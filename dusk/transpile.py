@@ -1,5 +1,5 @@
-from io import StringIO
-from typing import Iterator, List
+from io import TextIOBase
+from typing import Optional, Iterator, List
 import ast
 from dusk.grammar import Grammar
 from dusk.errors import DuskSyntaxError
@@ -27,8 +27,8 @@ def iter_stencils(module: ast.Module) -> Iterator[ast.AST]:
 
 def transpile(
     in_path: str,
-    out_sir_file: StringIO,
-    out_gencode_file: StringIO,
+    out_sir_file: Optional[TextIOBase],
+    out_gencode_file: Optional[TextIOBase],
     backend: str = default_backend,
     verbose: bool = False,
 ) -> None:

@@ -46,17 +46,21 @@ def main() -> None:
         args.out_file = in_filename + "_" + args.backend + ".cpp"
     out_stream = open(args.out_file, "w")
 
+    sir_stream = None
     if args.dump_sir:
         sir_stream = open(in_filename + ".json", "w")
 
     transpile(
         args.in_file,
-        sir_stream if args.dump_sir else None,
+        sir_stream,
         out_stream,
         backend=args.backend,
         verbose=args.verbose,
     )
+
     out_stream.close()
+    if sir_stream is not None:
+        sir_stream.close()
 
 
 if __name__ == "__main__":

@@ -50,7 +50,6 @@ def transpile(
         if out_sir_file is not None:
             out_sir_file.write(sir_to_json(sir))
         if out_gencode_file is not None:
-            code = compile(
-                sir, groups=[], backend=backend_map[backend]
-            )  # TODO: default pass groups are bugged in Dawn, need to pass empty list of groups
+            # TODO: default pass groups are bugged in Dawn, need to pass empty list of groups
+            code = compile(sir, groups=[], backend=backend_map[backend])
             out_gencode_file.write(code)

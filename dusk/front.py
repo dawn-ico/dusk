@@ -10,12 +10,10 @@ def main() -> None:
         description="Transforms the Python embedded DSL to SIR.",
     )
     argparser.add_argument("in_file", type=str, help="Input file (dusk stencil)")
-    
+
     args = argparser.parse_args()
 
-    transpile(args.in_file, stdout,
-              None # don't need to codegenerate
-             )
+    transpile(args.in_file, stdout, None)  # don't need to codegenerate
 
 
 if __name__ == "__main__":

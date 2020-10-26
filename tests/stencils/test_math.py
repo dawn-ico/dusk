@@ -32,4 +32,3 @@ def math_stencil(a: Field[Cell], b: Field[Cell], c: Field[Cell], d: Field[Cell])
 
         a = a + sqrt(b) + cos(c)
         a = max(min(b, c), d)
-

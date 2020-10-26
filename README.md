@@ -35,10 +35,30 @@ The package will install a `dusk` command-line tool which can be used to compile
 dusk --help
 ```
 
+and a pipeable `dusk-front` tool:
+
+```bash
+dusk-front --help
+```
+
+The output of `dusk-front` is Dawn's SIR (in JSON format), which is intended to be piped to the tools in the Dawn's toolchain in order to obtain generated code, e.g.
+
+```bash
+dusk-front ./tests/examples/laplacian_fvm.py | dawn-opt | dawn-codegen -b naive-ico
+```
+
+This allows to pass arguments to `dawn-opt` and `dawn-codegen` (for example to enable/configure optimizations).
+If one doesn't need such customization, a simpler way to obtain generated code is by using the `dusk` tool, which also allows backend selection (`-b` option). Example:
+
+```bash
+dusk -b ico-cuda -o ./laplacian_fd_cuda.cpp ./tests/examples/laplacian_fd.py
+```
+
 ## Overview
 - [tests/examples/](tests/examples/) - Examples of the dusk eDSL
 - [dusk/script/\_\_init\_\_.py](dusk/script/__init__.py) - Contains definitions & mocks for dusk
-- [dusk/cli.py](dusk/cli.py) - Implements a basic command line interface to compile dusk stencils
+- [dusk/cli.py](dusk/cli.py) - Implements a basic command line interface to compile dusk stencils to generated code
+- [dusk/front.py](dusk/front.py) - Implements a basic command line interface to compile dusk stencils to SIR
 - [dusk/transpile.py](dusk/transpile.py) - Provides a programmatic interface to compile dusk stencils
 - [dusk/grammar.py](dusk/grammar.py) - Implements most of the transformations for Python AST to SIR utilizing the matching framework
 - [dusk/semantics.py](dusk/semantics.py) - Provides infrastructure to support dusk's semantics (used by the grammar)

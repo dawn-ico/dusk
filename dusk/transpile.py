@@ -1,9 +1,10 @@
-from typing import Iterator, List
+from io import TextIOBase
+from typing import Optional, Iterator, List
 import ast
 from dusk.grammar import Grammar
 from dusk.errors import DuskSyntaxError
 
-from dawn4py import compile, CodeGenBackend
+from dawn4py import compile, CodeGenBackend, set_verbosity, LogLevel
 from dawn4py.serialization import pprint, make_sir, to_json as sir_to_json
 from dawn4py.serialization.SIR import GridType
 
@@ -25,7 +26,11 @@ def iter_stencils(module: ast.Module) -> Iterator[ast.AST]:
 
 
 def transpile(
-    in_path: str, out_path: str, backend: str = default_backend, dump_sir: bool = False
+    in_path: str,
+    out_sir_file: Optional[TextIOBase],
+    out_gencode_file: Optional[TextIOBase],
+    backend: str = default_backend,
+    verbose: bool = False,
 ) -> None:
 
     with open(in_path, "r") as in_file:
@@ -37,14 +42,14 @@ def transpile(
         # TODO: handle errors in different stencils separately
         stencils = [grammar.stencil(node) for node in iter_stencils(in_ast)]
 
+        if verbose:
+            set_verbosity(LogLevel.All)
+
         sir = make_sir(in_path, GridType.Value("Unstructured"), stencils)
 
-        if dump_sir:
-            out_name = os.path.splitext(out_path)[0]
-            with open(out_name + ".json", "w+") as f:
-                f.write(sir_to_json(sir))
-
-        out_code = compile(sir, backend=backend_map[backend])
-
-        with open(out_path, "w") as out_file:
-            out_file.write(out_code)
+        if out_sir_file is not None:
+            out_sir_file.write(sir_to_json(sir))
+        if out_gencode_file is not None:
+            # TODO: default pass groups are bugged in Dawn, need to pass empty list of groups
+            code = compile(sir, groups=[], backend=backend_map[backend])
+            out_gencode_file.write(code)

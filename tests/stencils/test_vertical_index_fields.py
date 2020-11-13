@@ -1,14 +1,14 @@
 from dusk.script import *
-from test_util import transpile, validate
+from dusk.transpile import callable_to_pyast, pyast_to_sir, validate
 
 
 def test_vertical_index_fields():
-    validate(transpile(simple_example))
+    validate(pyast_to_sir(callable_to_pyast(simple_example)))
     # FIXME: add validation again
-    transpile(various_expression)
-    transpile(index_fields_with_offsets)
-    transpile(various_dimensions_mix)
-    transpile(sparse_index_fields)
+    pyast_to_sir(callable_to_pyast(various_expression))
+    pyast_to_sir(callable_to_pyast(index_fields_with_offsets))
+    pyast_to_sir(callable_to_pyast(various_dimensions_mix))
+    pyast_to_sir(callable_to_pyast(sparse_index_fields))
 
 
 @stencil

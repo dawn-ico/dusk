@@ -1,15 +1,15 @@
 from dusk.script import *
-from test_util import transpile, validate
+from dusk.transpile import callable_to_pyast, pyast_to_sir, validate
 
 
 def test_field():
-    validate(transpile(temp_field))
-    validate(transpile(temp_field_demoted))
-    validate(transpile(hv_field))
-    validate(transpile(h_offsets))
-    validate(transpile(v_offsets))
-    validate(transpile(hv_offsets))
-    validate(transpile(redundant_vertical_index_in_2d_field))
+    validate(pyast_to_sir(callable_to_pyast(temp_field)))
+    validate(pyast_to_sir(callable_to_pyast(temp_field_demoted)))
+    validate(pyast_to_sir(callable_to_pyast(hv_field)))
+    validate(pyast_to_sir(callable_to_pyast(h_offsets)))
+    validate(pyast_to_sir(callable_to_pyast(v_offsets)))
+    validate(pyast_to_sir(callable_to_pyast(hv_offsets)))
+    validate(pyast_to_sir(callable_to_pyast(redundant_vertical_index_in_2d_field)))
 
 
 @stencil

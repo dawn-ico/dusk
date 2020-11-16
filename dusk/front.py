@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser
-from dusk import transpile
+from dusk.transpile import transpile
 from sys import stdout
 
 

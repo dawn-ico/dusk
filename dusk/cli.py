@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser
-from dusk import transpile, backend_map, default_backend
+from dusk.transpile import transpile, backend_map, default_backend
 from os import path
 
 

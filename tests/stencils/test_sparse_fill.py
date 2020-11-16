@@ -1,12 +1,12 @@
 from dusk.script import *
-from test_util import transpile, validate
+from dusk.transpile import callable_to_pyast, pyast_to_sir, validate
 
 
 def test_sparse_fill():
-    validate(transpile(sparse_order_2_fill))
-    validate(transpile(longer_fills))
-    validate(transpile(fill_with_reduction))
-    validate(transpile(ambiguous_fill))
+    validate(pyast_to_sir(callable_to_pyast(sparse_order_2_fill)))
+    validate(pyast_to_sir(callable_to_pyast(longer_fills)))
+    validate(pyast_to_sir(callable_to_pyast(fill_with_reduction)))
+    validate(pyast_to_sir(callable_to_pyast(ambiguous_fill)))
 
 
 @stencil

@@ -1,12 +1,12 @@
 from dusk.script import *
-from test_util import transpile, validate
+from dusk.transpile import callable_to_pyast, pyast_to_sir, validate
 
 
 def test_simple():
-    validate(transpile(control_flow))
-    validate(transpile(compound_assignment))
-    validate(transpile(power_operator))
-    validate(transpile(vertical_iteration_variable))
+    validate(pyast_to_sir(callable_to_pyast(control_flow)))
+    validate(pyast_to_sir(callable_to_pyast(compound_assignment)))
+    validate(pyast_to_sir(callable_to_pyast(power_operator)))
+    validate(pyast_to_sir(callable_to_pyast(vertical_iteration_variable)))
 
 
 @stencil

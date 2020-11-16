@@ -1,10 +1,10 @@
 from dusk.script import *
-from test_util import transpile, validate
+from dusk.transpile import callable_to_pyast, pyast_to_sir, validate
 
 
 def test_reduce():
-    validate(transpile(various_reductions))
-    validate(transpile(kw_args))
+    validate(pyast_to_sir(callable_to_pyast(various_reductions)))
+    validate(pyast_to_sir(callable_to_pyast(kw_args)))
 
 
 @stencil

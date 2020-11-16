@@ -19,16 +19,16 @@ __all__ = [
 ]
 
 
-def max(a: float, b: float) -> float:
-    raise NotImplementedError
+# (a: float, b: float) -> float
+max = max  # we reassing, because `min` is a built-in
 
 
-def min(a: float, b: float) -> float:
-    raise NotImplementedError
+# (a: float, b: float) -> float:
+min = min  # we reassing, because `max` is a built-in
 
 
-def pow(base: float, exp: float) -> float:
-    raise NotImplementedError
+# (base: float, exp: float) -> float:
+pow = pow  # we reassing, because `pow` is a built-in
 
 
 def sqrt(arg: float) -> float:

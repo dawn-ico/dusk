@@ -15,6 +15,7 @@ __all__ = [
     "IndexField",
     "levels_upward",
     "levels_downward",
+    "HorizontalDomains",
     "sparse",
     "reduce_over",
     "mul",
@@ -62,6 +63,10 @@ class IndexField:
 
 levels_upward = internal.VerticalRegion()
 levels_downward = internal.VerticalRegion()
+
+
+def HorizontalDomains(*markers) -> typing.Iterable:
+    return map(internal.HorizontalMarker, markers)
 
 
 sparse = internal.SparseFill()

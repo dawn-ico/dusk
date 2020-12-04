@@ -28,3 +28,8 @@ class VerticalRegion(Slicable, ContextManager):
 
 class SparseFill(Slicable, ContextManager):
     pass
+
+
+class HorizontalMarker:
+    def __init__(self, encoding: int):
+        self.__encoding = encoding

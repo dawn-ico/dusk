@@ -11,7 +11,7 @@ __all__ = [
     "arcsin",
     "arccos",
     "arctan",
-    "fabs",
+    "abs",
     "floor",
     "ceil",
     "isinf",
@@ -29,6 +29,10 @@ min = min  # we reassing, because `max` is a built-in
 
 # (base: float, exp: float) -> float:
 pow = pow  # we reassing, because `pow` is a built-in
+
+
+# (x: float) -> float
+abs = abs  # we reassing, because `abs` is a built-in
 
 
 def sqrt(arg: float) -> float:
@@ -64,10 +68,6 @@ def arccos(arg: float) -> float:
 
 
 def arctan(arg: float) -> float:
-    raise NotImplementedError
-
-
-def fabs(arg: float) -> float:
     raise NotImplementedError
 
 

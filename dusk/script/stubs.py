@@ -14,7 +14,7 @@ UNARY_MATH_FUNCTIONS = {
     script.arcsin,
     script.arccos,
     script.arctan,
-    script.fabs,
+    script.abs,
     script.floor,
     script.ceil,
     script.isinf,

@@ -108,7 +108,7 @@ class LocationHelper:
         return len(location_chain) <= 1
 
     @staticmethod
-    def get_field_dimension(field: sir.Field) -> LocationChain:
+    def get_field_dimension(field: sir.Field) -> LocationChain:        
         assert (
             field.field_dimensions.WhichOneof("horizontal_dimension")
             == "unstructured_horizontal_dimension"

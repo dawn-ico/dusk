@@ -159,13 +159,12 @@ class Grammar:
     def add_field_declaration(
         self, name: str, field_type: expr, is_temporary: bool = False
     ):
-        field_type, hindex, vindex = self.field_type(field_type)
-
+        field_type, [include_center, hindex], vindex = self.field_type(field_type)
         assert field_type in {"Field", "IndexField"}
         DuskFieldType = DuskField if field_type == "Field" else DuskIndexField
 
         if hindex is not None:
-            dimensions = make_field_dimensions_unstructured(hindex, vindex)
+            dimensions = make_field_dimensions_unstructured(hindex, vindex, include_center)
         else:
             dimensions = make_field_dimensions_vertical()
 
@@ -195,7 +194,7 @@ class Grammar:
     def field_type(self, field_type: str, hindex: expr = None, vindex: str = None):
         return (
             field_type,
-            self.location_chain(hindex) if hindex is not None else None,
+            self.location_chain(hindex) if hindex is not None else [False, None],
             1 if vindex is not None else 0,
         )
 
@@ -203,14 +202,25 @@ class Grammar:
         OneOf(
             name(Capture(str).append("locations")),
             Compare(
-                left=name(Capture(str).append("locations")),
+                left=OneOf(
+                    name(Capture(str).append("locations")),
+                    BinOp(
+                        left=name(Capture(str).append("locations")),
+                        op=Add,
+                        right=name(Capture(str).append("locations")),
+                    )),
                 ops=Repeat(Gt),
                 comparators=Repeat(name(Capture(str).append("locations"))),
             ),
         )
     )
     def location_chain(self, locations: t.List):
-        return [self.location_type(location) for location in locations]
+        inlcude_center = False
+        if (locations[0] == 'Origin'):
+            inlcude_center = True
+            locations = locations[1:]
+        locs = [self.location_type(location) for location in locations]       
+        return inlcude_center, [self.location_type(location) for location in locations]
 
     @transform(Capture(str).to("name"))
     def location_type(self, name: str):
@@ -405,12 +415,12 @@ class Grammar:
         )
     )
     def loop_stmt(self, neighborhood, body: t.List):
-        neighborhood = self.location_chain(neighborhood)
+        include_center, neighborhood = self.location_chain(neighborhood)
 
         with self.ctx.location.loop_stmt(neighborhood):
             body = self.statements(body)
 
-        return make_loop_stmt(body, neighborhood)
+        return make_loop_stmt(body, neighborhood, include_center)
 
     @transform(Capture(expr).to("expr"))
     def expression(self, expr: expr):
@@ -505,7 +515,7 @@ class Grammar:
         voffset, vbase = (
             self.relative_vertical_offset(vindex) if vindex is not None else (0, None)
         )
-        hindex = self.location_chain(hindex) if hindex is not None else None
+        [include_center, hindex] = self.location_chain(hindex) if hindex is not None else [False, None]        
 
         if not self.ctx.location.in_neighbor_iteration:
             if hindex is not None:
@@ -513,8 +523,7 @@ class Grammar:
                     f"Invalid horizontal index for field '{field.sir.name}' "
                     "outside of neighbor iteration!"
                 )
-            return make_unstructured_offset(False), voffset, vbase
-
+            return make_unstructured_offset(False), voffset, vbase       
         neighbor_iteration = self.ctx.location.current_neighbor_iteration
         field_dimension = self.ctx.location.get_field_dimension(field.sir)
 
@@ -812,8 +821,8 @@ class Grammar:
         wrong_kwargs = kwargs.keys() - {"init", "weights"}
         if 0 < len(wrong_kwargs):
             raise DuskSyntaxError(f"Unsupported kwargs '{wrong_kwargs}' in reduction!")
-
-        neighborhood = self.location_chain(neighborhood)
+        
+        include_center, neighborhood = self.location_chain(neighborhood)
         with self.ctx.location.reduction(neighborhood):
             expr = self.expression(expr)
 
@@ -848,4 +857,4 @@ class Grammar:
             # TODO: check for `kwargs["weight"].ctx == Load`?
             weights = [self.expression(weight) for weight in kwargs["weights"].elts]
 
-        return make_reduction_over_neighbor_expr(op, expr, init, neighborhood, weights,)
+        return make_reduction_over_neighbor_expr(op, expr, init, neighborhood, weights, include_center)

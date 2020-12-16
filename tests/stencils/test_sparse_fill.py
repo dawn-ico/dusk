@@ -98,3 +98,12 @@ def ambiguous_fill(
     with levels_downward:
         with sparse[Edge > Vertex > Edge]:
             sparse2 = edge2[Edge] - 4 * edge1[Edge > Vertex > Edge]
+
+@stencil
+def fill_with_center(
+    sparse: Field[Origin + Edge > Cell > Edge],
+    edge: Field[Edge],
+):
+    with levels_downward:
+        with sparse[Origin + Edge > Cell > Edge]:
+            sparse = edge[Origin + Edge > Cell > Edge]

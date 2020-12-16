@@ -84,4 +84,4 @@ def reductions_with_center(
     a: Field[Edge], b: Field[Origin + Edge > Cell > Edge], c: Field[Edge]
 ):
     with levels_downward:
-        a = sum_over(Origin + Edge > Cell > Edge, b*c[Edge > Cell > Edge])        
+        a = sum_over(Origin + Edge > Cell > Edge, b*c[Origin + Edge > Cell > Edge])

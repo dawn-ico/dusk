@@ -417,7 +417,7 @@ class Grammar:
     def loop_stmt(self, neighborhood, body: t.List):
         include_center, neighborhood = self.location_chain(neighborhood)
 
-        with self.ctx.location.loop_stmt(neighborhood):
+        with self.ctx.location.loop_stmt(neighborhood, include_center):
             body = self.statements(body)
 
         return make_loop_stmt(body, neighborhood, include_center)
@@ -523,16 +523,21 @@ class Grammar:
                     f"Invalid horizontal index for field '{field.sir.name}' "
                     "outside of neighbor iteration!"
                 )
-            return make_unstructured_offset(False), voffset, vbase       
-        neighbor_iteration = self.ctx.location.current_neighbor_iteration
+            return make_unstructured_offset(False), voffset, vbase                   
+        neighbor_iteration = self.ctx.location.current_neighbor_iteration.chain        
         field_dimension = self.ctx.location.get_field_dimension(field.sir)
+
+        if not self.ctx.location.is_ambiguous(neighbor_iteration) and include_center:
+            raise DuskSyntaxError(
+                    f"including the center is only allowed if start equals end location of the neighbor chain!"
+                )
 
         # TODO: `vindex` is _non-sensical_ if the field is 2d
 
         # TODO: we should check that `field_dimension` is valid for
         #       the current neighbor iteration(s?)
 
-        if hindex is None:
+        if hindex is None:           
             if self.ctx.location.is_dense(field_dimension):
                 if self.ctx.location.is_ambiguous(neighbor_iteration):
                     raise DuskSyntaxError(
@@ -550,6 +555,14 @@ class Grammar:
             return make_unstructured_offset(True), voffset, vbase
 
         # TODO: check if `hindex` is valid for this field's location type
+        
+        if self.ctx.location.is_dense(field_dimension) and self.ctx.location.current_neighbor_iteration.include_center:
+            assert(self.ctx.location.is_ambiguous(neighbor_iteration))
+            if not include_center:
+                raise DuskSyntaxError(
+                    f"Invalid horizontal offset for field '{field.sir.name}'! "
+                    "inconsistent center inclusion"
+                )
 
         if len(hindex) == 1:
             if neighbor_iteration[0] != hindex[0]:
@@ -823,7 +836,7 @@ class Grammar:
             raise DuskSyntaxError(f"Unsupported kwargs '{wrong_kwargs}' in reduction!")
         
         include_center, neighborhood = self.location_chain(neighborhood)
-        with self.ctx.location.reduction(neighborhood):
+        with self.ctx.location.reduction(neighborhood, include_center):
             expr = self.expression(expr)
 
         op_map = {"sum": "+", "mul": "*", "min": "min", "max": "max"}

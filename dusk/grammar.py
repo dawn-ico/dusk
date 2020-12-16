@@ -750,6 +750,10 @@ class Grammar:
         if name in self.unary_math_functions:
             if len(args) != 1:
                 raise DuskSyntaxError(f"Function '{name}' takes exactly one argument!")
+
+            if name == "abs":
+                name = "fabs"
+
             return make_fun_call_expr(
                 f"gridtools::dawn::math::{name}", [self.expression(args[0])]
             )

@@ -67,11 +67,11 @@ def vertical_iteration_variable(a: Field[Edge, K], b: Field[Edge, K]):
 
     with levels_downward[5:-3] as extraordinary_vertical_iteration_variable_name:
         a = b + 1
-        a[extraordinary_vertical_iteration_variable_name - 1] = b + 1
+        a = a[extraordinary_vertical_iteration_variable_name - 1] * b + 1
         a = b[extraordinary_vertical_iteration_variable_name + 1] + 1
 
     with levels_downward[5:10] as again_extraordinary:
-        a[again_extraordinary - 2] = b[again_extraordinary + 2] + 1
+        a = a[again_extraordinary - 2] / b[again_extraordinary + 2] + 1
 
 
 @stencil

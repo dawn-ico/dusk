@@ -524,10 +524,10 @@ class Grammar:
                     "outside of neighbor iteration!"
                 )
             return make_unstructured_offset(False), voffset, vbase                   
-        neighbor_iteration = self.ctx.location.current_neighbor_iteration.chain        
+        neighbor_chain = self.ctx.location.current_neighbor_iteration.chain        
         field_dimension = self.ctx.location.get_field_dimension(field.sir)
 
-        if not self.ctx.location.is_ambiguous(neighbor_iteration) and include_center:
+        if not self.ctx.location.is_ambiguous(neighbor_chain) and include_center:
             raise DuskSyntaxError(
                     f"including the center is only allowed if start equals end location of the neighbor chain!"
                 )
@@ -539,7 +539,7 @@ class Grammar:
 
         if hindex is None:           
             if self.ctx.location.is_dense(field_dimension):
-                if self.ctx.location.is_ambiguous(neighbor_iteration):
+                if self.ctx.location.is_ambiguous(neighbor_chain):
                     raise DuskSyntaxError(
                         f"Field '{field.sir.name}' requires a horizontal index "
                         "inside of ambiguous neighbor iteration!"
@@ -547,7 +547,7 @@ class Grammar:
 
                 return (
                     make_unstructured_offset(
-                        field_dimension[0] == neighbor_iteration[-1]
+                        field_dimension[0] == neighbor_chain[-1]
                     ),
                     voffset,
                     vbase,
@@ -557,7 +557,7 @@ class Grammar:
         # TODO: check if `hindex` is valid for this field's location type
         
         if self.ctx.location.is_dense(field_dimension) and self.ctx.location.current_neighbor_iteration.include_center:
-            assert(self.ctx.location.is_ambiguous(neighbor_iteration))
+            assert(self.ctx.location.is_ambiguous(neighbor_chain))
             if not include_center:
                 raise DuskSyntaxError(
                     f"Invalid horizontal offset for field '{field.sir.name}'! "
@@ -565,13 +565,13 @@ class Grammar:
                 )
 
         if len(hindex) == 1:
-            if neighbor_iteration[0] != hindex[0]:
+            if neighbor_chain[0] != hindex[0]:
                 raise DuskSyntaxError(
                     f"Invalid horizontal offset for field '{field.sir.name}'!"
                 )
             return make_unstructured_offset(False), voffset, vbase
 
-        if hindex != neighbor_iteration:
+        if hindex != neighbor_chain:
             raise DuskSyntaxError(
                 f"Invalid horizontal offset for field '{field.sir.name}'!"
             )

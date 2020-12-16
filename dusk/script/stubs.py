@@ -1,7 +1,7 @@
 import dusk.script as script
 
 
-LOCATION_TYPES = {script.Edge, script.Cell, script.Vertex}
+LOCATION_TYPES = {script.Edge, script.Cell, script.Vertex, script.Origin}
 
 
 UNARY_MATH_FUNCTIONS = {

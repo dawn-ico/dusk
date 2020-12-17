@@ -538,7 +538,10 @@ class Grammar:
                     voffset,
                     vbase,
                 )
-            return make_unstructured_offset(True), voffset, vbase
+            if self.ctx.location.is_dense(field_dimension):
+                return make_unstructured_offset(True), voffset, vbase
+            else:
+                return make_unstructured_offset(False), voffset, vbase
 
         # TODO: check if `hindex` is valid for this field's location type
 
@@ -554,7 +557,13 @@ class Grammar:
                 f"Invalid horizontal offset for field '{field.sir.name}'!"
             )
 
-        return make_unstructured_offset(True), voffset, vbase
+        if not self.ctx.location.is_dense(field_dimension):
+            raise DuskSyntaxError(
+                f"Invalid horizontal offset for field '{field.sir.name}'!"
+                "sparse fields do not take an offset (only non-offset read makes sense)"
+            )
+        
+        return make_unstructured_offset(True), voffset, vbase        
 
     @transform(
         OneOf(

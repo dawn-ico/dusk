@@ -4,7 +4,7 @@ import typing as t
 from ast import AST, expr, stmt
 
 
-class DuskInternalError(Exception):
+class InternalError(Exception):
     def __init__(self, message):
         self.message = message
 
@@ -27,16 +27,14 @@ class LocationInfo:
         return f"Line: {self.lineno} - {self.end_lineno}; Col: {self.col_offset} - {self.end_col_offset}"
 
 
-class DuskSyntaxError(Exception):
-    # maybe need more fine grained error hierarchy for, e.g., semantic errors
-    # TODO: we should probably have matcher errors vs dusk syntax errors
+class ASTError(Exception):
     def __init__(
         self,
-        text: str,
+        message: str,
         node: t.Optional[AST] = None,
         loc: t.Optional[LocationInfo] = None,
     ) -> None:
-        self.text = text
+        self.message = message
         self.node = node
         self.loc = loc
         if loc is None and isinstance(node, (stmt, expr)):
@@ -48,4 +46,14 @@ class DuskSyntaxError(Exception):
             self.loc = LocationInfo.from_node(node)
 
     def __str__(self):
-        return f"DuskSyntaxError: {self.text}\nat {self.loc}\n({self.node})"
+        return f"{type(self).__name__}: {self.message}\nat {self.loc}\n({self.node})"
+
+
+class SyntaxError(ASTError):
+    # marker class
+    pass
+
+
+class SemanticError(ASTError):
+    # marker class
+    pass

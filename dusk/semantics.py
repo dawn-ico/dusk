@@ -9,7 +9,7 @@ from collections import namedtuple
 
 from dawn4py.serialization import SIR as sir
 
-from dusk.errors import DuskSyntaxError, DuskInternalError
+from dusk.errors import SemanticError, SyntaxError
 
 
 @unique
@@ -140,9 +140,9 @@ class LocationHelper:
     @contextmanager
     def vertical_region(self):
         if self.in_vertical_region:
-            raise DuskSyntaxError("Vertical regions can't be nested!")
+            raise SemanticError("Vertical regions can't be nested!")
         if self.in_loop_stmt or self.in_reduction:
-            raise DuskSyntaxError(
+            raise SemanticError(
                 "Encountered vertical region inside reduction or loop statement!"
             )
         self.in_vertical_region = True
@@ -153,12 +153,12 @@ class LocationHelper:
     def _neighbor_iteration(self, location_chain: LocationChain, include_center: bool):
 
         if not self.in_vertical_region:
-            raise DuskSyntaxError(
+            raise SemanticError(
                 "Reductions or loop statements can only occur inside vertical regions!"
             )
 
         if len(location_chain) <= 1:
-            raise DuskSyntaxError(
+            raise SyntaxError(
                 "Reductions and loop statements must have a location chain of"
                 "length longer than 1!"
             )
@@ -171,9 +171,9 @@ class LocationHelper:
     def loop_stmt(self, location_chain: LocationChain, include_center: bool):
 
         if self.in_loop_stmt:
-            raise DuskSyntaxError("Nested loop statements aren't allowed!")
+            raise SemanticError("Nested loop statements aren't allowed!")
         if self.in_reduction:
-            raise DuskSyntaxError("Loop statements can't occur inside reductions!")
+            raise SemanticError("Loop statements can't occur inside reductions!")
 
         self.in_loop_stmt = True
         with self._neighbor_iteration(location_chain, include_center):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from ast import AST, stmt, expr
 
-from dusk.errors import DuskSyntaxError
+from dusk.errors import ASTError
 from dusk.util import pprint_matcher as pprint
 
 
@@ -17,7 +17,7 @@ __all__ = [
     "Capture",
     "FixedList",
     "BreakPoint",
-    "DuskSyntaxError",
+    "NoMatch",
 ]
 
 
@@ -32,6 +32,11 @@ class MatcherError(Exception):
         self.text = text
 
 
+class NoMatch(ASTError):
+    # marker class
+    pass
+
+
 class FixedList(Matcher):
     _fields = ("matchers",)
 
@@ -41,12 +46,10 @@ class FixedList(Matcher):
     def match(self, nodes, **kwargs):
 
         if not isinstance(nodes, list):
-            raise DuskSyntaxError(f"Expected a list, but got '{type(nodes)}'!", nodes)
+            raise NoMatch(f"Expected a list, but got '{type(nodes)}'!", nodes)
 
         if len(nodes) != len(self.matchers):
-            raise DuskSyntaxError(
-                f"Expected a list of length {len(self.matchers)}'!", nodes
-            )
+            raise NoMatch(f"Expected a list of length {len(self.matchers)}'!", nodes)
 
         for matcher, node in zip(self.matchers, nodes):
             match(matcher, node, **kwargs)
@@ -63,11 +66,11 @@ class Repeat(Matcher):
     def match(self, nodes, **kwargs) -> None:
 
         if not isinstance(nodes, list):
-            raise DuskSyntaxError(f"Expected a list, but got '{type(nodes)}'!", nodes)
+            raise NoMatch(f"Expected a list, but got '{type(nodes)}'!", nodes)
 
         elif isinstance(self.n, int):
             if len(nodes) != self.n:
-                raise DuskSyntaxError(
+                raise NoMatch(
                     f"Expected a list of length {self.n}, but got list of length {len(nodes)}!",
                     nodes,
                 )
@@ -101,11 +104,11 @@ class OneOf(Matcher):
                 match(matcher, node, **kwargs)
                 matched = True
                 break
-            except DuskSyntaxError:
+            except NoMatch:
                 pass
 
         if not matched:
-            raise DuskSyntaxError(f"Encountered unrecognized node '{node}'!", node)
+            raise NoMatch(f"Encountered unrecognized node '{node}'!", node)
 
 
 def Optional(matcher) -> Matcher:
@@ -177,20 +180,20 @@ def does_match(matcher, node, **kwargs) -> bool:
     try:
         match(matcher, node, **kwargs)
         return True
-    except DuskSyntaxError:
+    except NoMatch:
         return False
 
 
 def match_ast(matcher: AST, node, **kwargs):
     if not isinstance(node, type(matcher)):
-        raise DuskSyntaxError(
+        raise NoMatch(
             f"Expected node type '{type(matcher)}', but got '{type(node)}'!", node
         )
 
     for field in matcher._fields:
         try:
             match(getattr(matcher, field), getattr(node, field), **kwargs)
-        except DuskSyntaxError as e:
+        except NoMatch as e:
             if e.loc is None and isinstance(node, (stmt, expr)):
                 # add location info if possible
                 e.loc_from_node(node)
@@ -199,9 +202,7 @@ def match_ast(matcher: AST, node, **kwargs):
 
 def match_type(matcher: type, node, **kwargs):
     if not isinstance(node, matcher):
-        raise DuskSyntaxError(
-            f"Expected type '{matcher}', but got '{type(node)}'", node
-        )
+        raise NoMatch(f"Expected type '{matcher}', but got '{type(node)}'", node)
 
 
 PRIMITIVES = (str, int, type(None))
@@ -209,4 +210,4 @@ PRIMITIVES = (str, int, type(None))
 
 def match_primitives(matcher, node, **kwargs):
     if matcher != node:
-        raise DuskSyntaxError(f"Expected '{matcher}', but got '{node}'!", node)
+        raise NoMatch(f"Expected '{matcher}', but got '{node}'!", node)

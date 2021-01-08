@@ -9,7 +9,7 @@ from io import TextIOBase
 from dusk.grammar import Grammar
 
 from dawn4py import compile, CodeGenBackend, set_verbosity, LogLevel
-from dawn4py.serialization import pprint, make_sir, to_json as sir_to_json
+from dawn4py.serialization import make_sir, to_json as sir_to_json
 from dawn4py.serialization.SIR import GridType, SIR
 from dawn4py._dawn4py import run_optimizer_sir
 

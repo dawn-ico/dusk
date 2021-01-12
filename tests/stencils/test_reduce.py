@@ -36,7 +36,10 @@ def various_reductions(
                 - sum_over(
                     Edge > Cell,
                     sqrt(cell),
-                    weights=[edge[Edge], arcsin(edge[Edge] * 100),],
+                    weights=[
+                        edge[Edge],
+                        arcsin(edge[Edge] * 100),
+                    ],
                 ),
             ),
             mul,

@@ -13,8 +13,7 @@ __all__ = [
     "K",
     "Field",
     "IndexField",
-    "levels_upward",
-    "levels_downward",
+    "domain",
     "HorizontalDomains",
     "sparse",
     "reduce_over",
@@ -61,8 +60,7 @@ class IndexField:
         pass
 
 
-levels_upward = internal.VerticalRegion()
-levels_downward = internal.VerticalRegion()
+domain = internal.Domain()
 
 
 def HorizontalDomains(*markers) -> typing.Iterable:

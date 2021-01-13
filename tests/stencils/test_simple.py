@@ -1,16 +1,9 @@
 from dusk.script import *
-from dusk.transpile import callable_to_pyast, pyast_to_sir, validate
+from dusk.test import stencil_test
 
 
-def test_simple():
-    validate(pyast_to_sir(callable_to_pyast(control_flow)))
-    validate(pyast_to_sir(callable_to_pyast(compound_assignment)))
-    validate(pyast_to_sir(callable_to_pyast(power_operator)))
-    validate(pyast_to_sir(callable_to_pyast(vertical_iteration_variable)))
-
-
-@stencil
-def control_flow(
+@stencil_test()
+def test_control_flow(
     a: Field[Edge, K], b: Field[Edge, K], c: Field[Edge, K], d: Field[Vertex, K]
 ):
 
@@ -62,8 +55,8 @@ def control_flow(
             c = a - 1
 
 
-@stencil
-def vertical_iteration_variable(a: Field[Edge, K], b: Field[Edge, K]):
+@stencil_test()
+def test_vertical_iteration_variable(a: Field[Edge, K], b: Field[Edge, K]):
 
     with levels_downward[5:-3] as extraordinary_vertical_iteration_variable_name:
         a = b + 1
@@ -74,8 +67,8 @@ def vertical_iteration_variable(a: Field[Edge, K], b: Field[Edge, K]):
         a = a[again_extraordinary - 2] / b[again_extraordinary + 2] + 1
 
 
-@stencil
-def compound_assignment(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
+@stencil_test()
+def test_compound_assignment(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
     with levels_upward:
         # Add
         a += b
@@ -105,8 +98,8 @@ def compound_assignment(a: Field[Edge], b: Field[Edge], c: Field[Edge]):
         # unsupported!
 
 
-@stencil
-def power_operator(
+@stencil_test()
+def test_power_operator(
     a: Field[Edge], b: Field[Edge], c: Field[Edge], d: Field[Edge > Cell]
 ):
     with levels_downward:

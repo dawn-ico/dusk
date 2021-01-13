@@ -1,4 +1,7 @@
 import typing
+
+import dusk.integration as integration
+
 from dusk.script import internal
 
 from dusk.script.math import *
@@ -25,6 +28,7 @@ __all__ = [
 
 
 def stencil(stencil: typing.Callable) -> typing.Callable:
+    integration.stencil_collection.append(integration.StencilObject(stencil))
     return stencil
 
 

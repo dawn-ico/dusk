@@ -92,20 +92,6 @@ def dispatch(rules: t.Dict[t.Any, t.Callable], node):
 
 
 class Grammar:
-    @staticmethod
-    def is_stencil(node) -> bool:
-        return does_match(
-            FunctionDef(
-                name=_,
-                args=_,
-                body=_,
-                decorator_list=FixedList(name(stencil_decorator.__name__)),
-                returns=_,
-                type_comment=_,
-            ),
-            node,
-        )
-
     def __init__(self):
         self.ctx = DuskContextHelper()
 
@@ -122,19 +108,19 @@ class Grammar:
                 defaults=EmptyList,
             ),
             body=Capture(_).to("body"),
-            decorator_list=FixedList(name(stencil_decorator.__name__)),
+            decorator_list=_,
             returns=Optional(Constant(value=None, kind=None)),
             type_comment=None,
         )
     )
     def stencil(self, name: str, body: t.List, fields: t.List):
-        with self.ctx.scope.new_scope():
+        with self.ctx.scope.new_scope() as stencil_scope:
             for field in fields:
                 self.field_declaration(field)
             body = make_ast(self.statements(body, in_stencil_root_scope=True))
             fields = [
                 symbol.sir
-                for symbol in self.ctx.scope.current_scope
+                for symbol in stencil_scope.local_iter()
                 if isinstance(symbol, (DuskField, DuskIndexField))
             ]
         return make_stencil(name, body, fields)

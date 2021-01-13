@@ -1,19 +1,9 @@
 from dusk.script import *
-from dusk.transpile import callable_to_pyast, pyast_to_sir, validate
+from dusk.test import stencil_test
 
 
-def test_field():
-    validate(pyast_to_sir(callable_to_pyast(temp_field)))
-    validate(pyast_to_sir(callable_to_pyast(temp_field_demoted)))
-    validate(pyast_to_sir(callable_to_pyast(hv_field)))
-    validate(pyast_to_sir(callable_to_pyast(h_offsets)))
-    validate(pyast_to_sir(callable_to_pyast(v_offsets)))
-    validate(pyast_to_sir(callable_to_pyast(hv_offsets)))
-    validate(pyast_to_sir(callable_to_pyast(redundant_vertical_index_in_2d_field)))
-
-
-@stencil
-def temp_field(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
+@stencil_test()
+def test_temp_field(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
     x: Field[Edge, K]
     with levels_downward as k:
         x = 1  # stricly necessary in dawn
@@ -25,8 +15,8 @@ def temp_field(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
         out = x
 
 
-@stencil
-def temp_field_demoted(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
+@stencil_test()
+def test_temp_field_demoted(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]):
     x: Field[Edge, K]
     y: Field[Edge, K]
     with levels_downward:
@@ -38,8 +28,8 @@ def temp_field_demoted(a: Field[Edge, K], b: Field[Edge, K], out: Field[Edge, K]
             out = y
 
 
-@stencil
-def hv_field(
+@stencil_test()
+def test_hv_field(
     out: Field[Edge, K],
     full: Field[Edge, K],
     horizontal: Field[Edge],
@@ -52,8 +42,8 @@ def hv_field(
         out = sum_over(Edge > Cell, horizontal_sparse)
 
 
-@stencil
-def h_offsets(
+@stencil_test()
+def test_h_offsets(
     a: Field[Edge > Cell > Edge, K], b: Field[Edge, K], c: Field[Edge > Cell > Edge, K]
 ):
     with levels_upward:
@@ -62,16 +52,16 @@ def h_offsets(
             a = b[Edge] + c
 
 
-@stencil
-def v_offsets(a: Field[Edge, K], b: Field[Edge, K], c: Field[Edge, K]):
+@stencil_test()
+def test_v_offsets(a: Field[Edge, K], b: Field[Edge, K], c: Field[Edge, K]):
     with levels_upward as k:
         # classic central gradient access with "shortcut" on lhs (omit k)
         a[k] = b[k] + c[k]
         a[k] = b[k] + c[k - 1]  # classic backward gradient access
 
 
-@stencil
-def hv_offsets(
+@stencil_test()
+def test_hv_offsets(
     a: Field[Edge > Cell > Edge, K], b: Field[Edge, K], c: Field[Edge > Cell > Edge, K]
 ):
     with levels_upward as k:
@@ -81,8 +71,8 @@ def hv_offsets(
             a = b[Edge, k] + b[Edge, k - 1] + c
 
 
-@stencil
-def redundant_vertical_index_in_2d_field(
+@stencil_test()
+def test_redundant_vertical_index_in_2d_field(
     edge_2d_field1: Field[Edge],
     edge_2d_field2: Field[Edge],
     cell_2d_field1: Field[Cell],

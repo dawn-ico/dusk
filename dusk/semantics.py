@@ -4,7 +4,6 @@ from typing import NewType, Optional, ClassVar, Iterator, Iterable, List, Dict
 from enum import Enum, auto, unique
 from dataclasses import dataclass
 from contextlib import contextmanager
-from itertools import chain
 from collections import namedtuple
 
 from dawn4py.serialization import SIR as sir
@@ -41,7 +40,7 @@ class IndexField(Symbol):
     sir: sir.Field
 
 
-class Scope(Iterable[Symbol]):
+class Scope:
     symbols: Dict[str, Symbol]
     parent: Optional[Scope]
 
@@ -70,10 +69,8 @@ class Scope(Iterable[Symbol]):
 
         self.symbols[name] = symbol
 
-    def __iter__(self) -> Iterator[Symbol]:
-        if self.parent is None:
-            return iter(self.symbols.values())
-        return chain(iter(self.symbols.values()), self.parent)
+    def local_iter(self) -> Iterator[Symbol]:
+        return iter(self.symbols.values())
 
 
 class ScopeHelper:

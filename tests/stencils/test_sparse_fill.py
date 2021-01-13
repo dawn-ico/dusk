@@ -1,17 +1,9 @@
 from dusk.script import *
-from dusk.transpile import callable_to_pyast, pyast_to_sir, validate
+from dusk.test import stencil_test
 
 
-def test_sparse_fill():
-    validate(pyast_to_sir(callable_to_pyast(sparse_order_2_fill)))
-    validate(pyast_to_sir(callable_to_pyast(longer_fills)))
-    validate(pyast_to_sir(callable_to_pyast(fill_with_reduction)))
-    validate(pyast_to_sir(callable_to_pyast(ambiguous_fill)))
-    validate(pyast_to_sir(callable_to_pyast(fill_with_center)))
-
-
-@stencil
-def sparse_order_2_fill(
+@stencil_test()
+def test_sparse_order_2_fill(
     vertex: Field[Vertex],
     edge: Field[Edge, K],
     cell: Field[Cell],
@@ -42,8 +34,8 @@ def sparse_order_2_fill(
             ce = sqrt(edge ** 2 + cell ** 2)
 
 
-@stencil
-def longer_fills(
+@stencil_test()
+def test_longer_fills(
     sparse1: Field[Vertex > Edge > Cell > Vertex > Edge > Cell],
     sparse2: Field[Cell > Edge > Cell > Edge > Cell > Edge],
     sparse3: Field[Edge > Cell > Vertex > Edge > Vertex > Edge],
@@ -61,8 +53,8 @@ def longer_fills(
             sparse3 = 50
 
 
-@stencil
-def fill_with_reduction(
+@stencil_test()
+def test_fill_with_reduction(
     sparse1: Field[Edge > Cell > Vertex],
     sparse2: Field[Edge > Cell > Vertex, K],
     vertex: Field[Vertex],
@@ -85,8 +77,8 @@ def fill_with_reduction(
             sparse2 = min_over(Vertex > Edge > Vertex, vertex[Vertex > Edge > Vertex])
 
 
-@stencil
-def ambiguous_fill(
+@stencil_test()
+def test_ambiguous_fill(
     sparse1: Field[Edge > Cell > Edge, K],
     sparse2: Field[Edge > Vertex > Edge, K],
     edge1: Field[Edge, K],
@@ -101,8 +93,8 @@ def ambiguous_fill(
             sparse2 = edge2[Edge] - 4 * edge1[Edge > Vertex > Edge]
 
 
-@stencil
-def fill_with_center(
+@stencil_test()
+def test_fill_with_center(
     sparse1: Field[Origin + Edge > Cell > Edge],
     edge: Field[Edge],
 ):

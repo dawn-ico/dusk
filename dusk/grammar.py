@@ -181,7 +181,8 @@ class Grammar:
                 value=OneOf(
                     Tuple(
                         elts=FixedList(
-                            Capture(_).to("hindex"), name(Capture("K").to("vindex")),
+                            Capture(_).to("hindex"),
+                            name(Capture("K").to("vindex")),
                         ),
                         ctx=Load,
                     ),
@@ -449,7 +450,10 @@ class Grammar:
             # TODO: does `str` really work here? (what about NaNs, precision, 1e11 notation, etc)
             value = str(value)
 
-        return make_literal_access_expr(value, _type,)
+        return make_literal_access_expr(
+            value,
+            _type,
+        )
 
     @transform(Name(id=Capture(str).to("name"), ctx=AnyContext))
     def var(self, name: str, index: expr = None):
@@ -518,6 +522,12 @@ class Grammar:
         neighbor_iteration = self.ctx.location.current_neighbor_iteration
         field_dimension = self.ctx.location.get_field_dimension(field.sir)
 
+        if hindex is not None and not self.ctx.location.is_dense(field_dimension):
+            raise DuskSyntaxError(
+                f"Invalid horizontal offset for field '{field.sir.name}',"
+                "sparse fields do not take an offset (only non-offset read makes sense)!"
+            )
+
         # TODO: `vindex` is _non-sensical_ if the field is 2d
 
         # TODO: we should check that `field_dimension` is valid for
@@ -538,7 +548,8 @@ class Grammar:
                     voffset,
                     vbase,
                 )
-            return make_unstructured_offset(True), voffset, vbase
+            else:
+                return make_unstructured_offset(False), voffset, vbase
 
         # TODO: check if `hindex` is valid for this field's location type
 
@@ -696,9 +707,13 @@ class Grammar:
         return make_ternary_operator(condition, body, orelse)
 
     @transform(
-        Capture(Call(func=name(Capture(str).to("name")), args=_, keywords=_,)).to(
-            "node"
-        )
+        Capture(
+            Call(
+                func=name(Capture(str).to("name")),
+                args=_,
+                keywords=_,
+            )
+        ).to("node")
     )
     def funcall(self, name: str, node: Call):
         # TODO: bad hardcoded string
@@ -779,7 +794,10 @@ class Grammar:
                 # TODO: bad hardcoded string
                 Capture(OneOf("sum_over", "min_over", "max_over")).to("short_cut_name")
             ),
-            args=FixedList(Capture(expr).to("neighborhood"), Capture(expr).to("expr"),),
+            args=FixedList(
+                Capture(expr).to("neighborhood"),
+                Capture(expr).to("expr"),
+            ),
             keywords=Repeat(
                 keyword(
                     arg=Capture(str).append("kwargs_keys"),
@@ -852,4 +870,10 @@ class Grammar:
             # TODO: check for `kwargs["weight"].ctx == Load`?
             weights = [self.expression(weight) for weight in kwargs["weights"].elts]
 
-        return make_reduction_over_neighbor_expr(op, expr, init, neighborhood, weights,)
+        return make_reduction_over_neighbor_expr(
+            op,
+            expr,
+            init,
+            neighborhood,
+            weights,
+        )

@@ -114,10 +114,7 @@ class LocationHelper:
             == "unstructured_horizontal_dimension"
         )
         dimension = field.field_dimensions.unstructured_horizontal_dimension
-        if 0 < len(dimension.sparse_part):
-            return list(dimension.sparse_part)
-        else:
-            return [dimension.dense_location_type]
+        return dimension.iter_space.chain
 
     @staticmethod
     def is_ambiguous(chain: LocationChain) -> bool:

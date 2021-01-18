@@ -88,6 +88,6 @@ def reductions_with_a_global(a: Field[Edge], dt: Global):
         a = dt
 
 @stencil
-def reductions_with_two_globals(a: Field[Edge], one: Global, two Global):
+def reductions_with_two_globals(a: Field[Edge], one: Global, two: Global):
     with levels_downward:
         a = one + two

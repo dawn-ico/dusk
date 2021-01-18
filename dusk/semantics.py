@@ -5,6 +5,7 @@ from enum import Enum, auto, unique
 from dataclasses import dataclass
 from contextlib import contextmanager
 from itertools import chain
+from collections import namedtuple
 
 from dawn4py.serialization import SIR as sir
 
@@ -93,7 +94,7 @@ class ScopeHelper:
 
 
 LocationTypeValue = NewType("LocationTypeValue", int)
-LocationChain = List[LocationTypeValue]
+IterationSpace = namedtuple("IterationSpace", "chain, include_center")
 
 
 class LocationHelper:
@@ -101,7 +102,7 @@ class LocationHelper:
     in_vertical_region: bool
     in_loop_stmt: bool
     in_reduction: bool
-    neighbor_iterations: List[LocationChain]
+    neighbor_iterations: List[IterationSpace]
 
     @staticmethod
     def is_dense(location_chain: LocationChain) -> bool:
@@ -128,7 +129,7 @@ class LocationHelper:
         self.neighbor_iterations = []
 
     @property
-    def current_neighbor_iteration(self) -> LocationChain:
+    def current_neighbor_iteration(self) -> IterationSpace:
         assert self.in_neighbor_iteration
         return self.neighbor_iterations[-1]
 
@@ -149,7 +150,7 @@ class LocationHelper:
         self.in_vertical_region = False
 
     @contextmanager
-    def _neighbor_iteration(self, location_chain: LocationChain):
+    def _neighbor_iteration(self, location_chain: LocationChain, include_center: bool):
 
         if not self.in_vertical_region:
             raise DuskSyntaxError(
@@ -162,12 +163,12 @@ class LocationHelper:
                 "length longer than 1!"
             )
 
-        self.neighbor_iterations.append(location_chain)
+        self.neighbor_iterations.append(IterationSpace(location_chain, include_center))
         yield
         self.neighbor_iterations.pop()
 
     @contextmanager
-    def loop_stmt(self, location_chain: LocationChain):
+    def loop_stmt(self, location_chain: LocationChain, include_center: bool):
 
         if self.in_loop_stmt:
             raise DuskSyntaxError("Nested loop statements aren't allowed!")
@@ -175,14 +176,14 @@ class LocationHelper:
             raise DuskSyntaxError("Loop statements can't occur inside reductions!")
 
         self.in_loop_stmt = True
-        with self._neighbor_iteration(location_chain):
+        with self._neighbor_iteration(location_chain, include_center):
             yield
         self.in_loop_stmt = False
 
     @contextmanager
-    def reduction(self, location_chain: LocationChain):
+    def reduction(self, location_chain: LocationChain, include_center: bool):
         self.in_reduction = True
-        with self._neighbor_iteration(location_chain):
+        with self._neighbor_iteration(location_chain, include_center):
             yield
         self.in_reduction = False
 

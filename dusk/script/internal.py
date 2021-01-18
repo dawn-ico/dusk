@@ -3,7 +3,10 @@ class LocationType(type):
         return super().__new__(cls, name, bases, dict)
 
     def __gt__(cls, other_cls):
-        pass
+        return cls
+
+    def __add__(cls, other_cls):
+        return cls
 
 
 class Slicable:

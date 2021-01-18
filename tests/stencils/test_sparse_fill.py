@@ -7,6 +7,7 @@ def test_sparse_fill():
     validate(pyast_to_sir(callable_to_pyast(longer_fills)))
     validate(pyast_to_sir(callable_to_pyast(fill_with_reduction)))
     validate(pyast_to_sir(callable_to_pyast(ambiguous_fill)))
+    validate(pyast_to_sir(callable_to_pyast(fill_with_center)))
 
 
 @stencil
@@ -98,3 +99,13 @@ def ambiguous_fill(
     with levels_downward:
         with sparse[Edge > Vertex > Edge]:
             sparse2 = edge2[Edge] - 4 * edge1[Edge > Vertex > Edge]
+
+
+@stencil
+def fill_with_center(
+    sparse1: Field[Origin + Edge > Cell > Edge],
+    edge: Field[Edge],
+):
+    with levels_downward:
+        with sparse[Origin + Edge > Cell > Edge]:
+            sparse1 = edge[Origin + Edge > Cell > Edge]

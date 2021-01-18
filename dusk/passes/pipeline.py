@@ -7,6 +7,7 @@ import dawn4py.serialization.SIR as sir
 from dusk.integration import StencilObject
 from dusk.grammar import Grammar
 from dusk.passes.symbol_resolution import resolve_symbols
+from dusk.passes.resolve_globals import resolve_globals
 
 
 def stencil_object_to_sir(stencil_object: StencilObject) -> sir.Stencil:
@@ -14,6 +15,7 @@ def stencil_object_to_sir(stencil_object: StencilObject) -> sir.Stencil:
     add_filename(stencil_object)
     add_pyast(stencil_object)
     resolve_symbols(stencil_object)
+    resolve_globals(stencil_object)
     add_sir(stencil_object)
 
     return stencil_object.sir_node
@@ -42,5 +44,8 @@ def add_sir(stencil_object: StencilObject) -> None:
 
     sir_stencil = Grammar().stencil(stencil_object.pyast)
     stencil_object.sir_node = ser.make_sir(
-        stencil_object.filename, sir.GridType.Value("Unstructured"), [sir_stencil]
+        stencil_object.filename,
+        sir.GridType.Value("Unstructured"),
+        [sir_stencil],
+        global_variables=stencil_object.globals,
     )

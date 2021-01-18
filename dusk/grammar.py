@@ -463,8 +463,12 @@ class Grammar:
             _type,
         )
 
-    @transform(Name(id=Capture(str).to("name"), ctx=AnyContext))
-    def var(self, name: str, index: expr = None):
+    @transform(Capture(Name(id=Capture(str).to("name"), ctx=AnyContext)).to("node"))
+    def var(self, node: Name, name: str, index: expr = None):
+
+        if hasattr(node, "sir"):
+            # FIXME: remove once symbol resolution has been properly unified
+            return node.sir
 
         if not self.ctx.scope.current_scope.contains(name):
             raise SemanticError(f"Undeclared variable '{name}'!", name)

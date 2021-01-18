@@ -10,6 +10,7 @@ class StencilObject:
     callable: Callable
     filename: str
     pyast: Optional[ast.FunctionDef] = None
+    globals: Optional[sir.GlobalVariableMap]
     sir_node: Optional[sir.SIR] = None
 
     def __init__(self, callable: Callable, filename: str = "<unknown>"):

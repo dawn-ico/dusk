@@ -9,6 +9,7 @@ from dusk.script.math import __all__ as __math_all__
 
 __all__ = [
     "stencil",
+    "Global",
     "Edge",
     "Cell",
     "Vertex",
@@ -36,6 +37,13 @@ levels_upward = levels_downward = "levels_hack"
 def stencil(stencil: typing.Callable) -> typing.Callable:
     integration.stencil_collection.append(integration.StencilObject(stencil))
     return stencil
+
+
+class Global:
+    name: str
+
+    def __init__(self, name: str):
+        self.name = name
 
 
 class Edge(metaclass=internal.LocationType):

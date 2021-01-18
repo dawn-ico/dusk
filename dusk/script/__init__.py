@@ -39,6 +39,7 @@ class Cell(metaclass=internal.LocationType):
 class Vertex(metaclass=internal.LocationType):
     pass
 
+
 class Origin(metaclass=internal.LocationType):
     pass
 

@@ -96,6 +96,7 @@ class ScopeHelper:
 LocationTypeValue = NewType("LocationTypeValue", int)
 IterationSpace = namedtuple("IterationSpace", "chain, include_center")
 
+
 class LocationHelper:
 
     in_vertical_region: bool

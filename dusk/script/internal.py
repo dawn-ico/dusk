@@ -8,6 +8,7 @@ class LocationType(type):
     def __add__(cls, other_cls):
         return cls
 
+
 class Slicable:
     def __getitem__(self, slice):
         raise NotImplementedError

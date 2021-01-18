@@ -164,7 +164,9 @@ class Grammar:
         DuskFieldType = DuskField if field_type == "Field" else DuskIndexField
 
         if hindex is not None:
-            dimensions = make_field_dimensions_unstructured(hindex, vindex, include_center)
+            dimensions = make_field_dimensions_unstructured(
+                hindex, vindex, include_center
+            )
         else:
             dimensions = make_field_dimensions_vertical()
 
@@ -209,7 +211,8 @@ class Grammar:
                         left=name(Capture(str).append("locations")),
                         op=Add,
                         right=name(Capture(str).append("locations")),
-                    )),
+                    ),
+                ),
                 ops=Repeat(Gt),
                 comparators=Repeat(name(Capture(str).append("locations"))),
             ),
@@ -217,10 +220,10 @@ class Grammar:
     )
     def location_chain(self, locations: t.List):
         inlcude_center = False
-        if (locations[0] == 'Origin'):
+        if locations[0] == "Origin":
             inlcude_center = True
             locations = locations[1:]
-        locs = [self.location_type(location) for location in locations]       
+        locs = [self.location_type(location) for location in locations]
         return inlcude_center, [self.location_type(location) for location in locations]
 
     @transform(Capture(str).to("name"))
@@ -519,7 +522,9 @@ class Grammar:
         voffset, vbase = (
             self.relative_vertical_offset(vindex) if vindex is not None else (0, None)
         )
-        [include_center, hindex] = self.location_chain(hindex) if hindex is not None else [False, None]        
+        [include_center, hindex] = (
+            self.location_chain(hindex) if hindex is not None else [False, None]
+        )
 
         if not self.ctx.location.in_neighbor_iteration:
             if hindex is not None:
@@ -527,8 +532,8 @@ class Grammar:
                     f"Invalid horizontal index for field '{field.sir.name}' "
                     "outside of neighbor iteration!"
                 )
-            return make_unstructured_offset(False), voffset, vbase                   
-        neighbor_chain = self.ctx.location.current_neighbor_iteration.chain        
+            return make_unstructured_offset(False), voffset, vbase
+        neighbor_chain = self.ctx.location.current_neighbor_iteration.chain
         field_dimension = self.ctx.location.get_field_dimension(field.sir)
 
         if hindex is not None and not self.ctx.location.is_dense(field_dimension):
@@ -539,8 +544,8 @@ class Grammar:
 
         if not self.ctx.location.is_ambiguous(neighbor_chain) and include_center:
             raise DuskSyntaxError(
-                    f"including the center is only allowed if start equals end location of the neighbor chain!"
-                )
+                f"including the center is only allowed if start equals end location of the neighbor chain!"
+            )
 
         # TODO: `vindex` is _non-sensical_ if the field is 2d
 
@@ -556,9 +561,7 @@ class Grammar:
                     )
 
                 return (
-                    make_unstructured_offset(
-                        field_dimension[0] == neighbor_chain[-1]
-                    ),
+                    make_unstructured_offset(field_dimension[0] == neighbor_chain[-1]),
                     voffset,
                     vbase,
                 )
@@ -566,9 +569,12 @@ class Grammar:
                 return make_unstructured_offset(False), voffset, vbase
 
         # TODO: check if `hindex` is valid for this field's location type
-        
-        if self.ctx.location.is_dense(field_dimension) and self.ctx.location.current_neighbor_iteration.include_center:
-            assert(self.ctx.location.is_ambiguous(neighbor_chain))
+
+        if (
+            self.ctx.location.is_dense(field_dimension)
+            and self.ctx.location.current_neighbor_iteration.include_center
+        ):
+            assert self.ctx.location.is_ambiguous(neighbor_chain)
             if not include_center:
                 raise DuskSyntaxError(
                     f"Invalid horizontal offset for field '{field.sir.name}'! "
@@ -856,7 +862,7 @@ class Grammar:
         wrong_kwargs = kwargs.keys() - {"init", "weights"}
         if 0 < len(wrong_kwargs):
             raise DuskSyntaxError(f"Unsupported kwargs '{wrong_kwargs}' in reduction!")
-        
+
         include_center, neighborhood = self.location_chain(neighborhood)
         with self.ctx.location.reduction(neighborhood, include_center):
             expr = self.expression(expr)
@@ -893,10 +899,5 @@ class Grammar:
             weights = [self.expression(weight) for weight in kwargs["weights"].elts]
 
         return make_reduction_over_neighbor_expr(
-            op,
-            expr,
-            init,
-            neighborhood,
-            weights,
-            include_center
+            op, expr, init, neighborhood, weights, include_center
         )

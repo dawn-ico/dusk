@@ -163,7 +163,8 @@ class Grammar:
     ):
         if isinstance(field_type, Name) and field_type.id == "Global":
             self.ctx.scope.current_scope.add(name, DuskGlobal())
-            self.globals = sir.GlobalVariableMap()
+            if self.globals is None:
+                self.globals = sir.GlobalVariableMap()
             self.globals.map[name].double_value = 0
             return
         field_type, [include_center, hindex], vindex = self.field_type(field_type)

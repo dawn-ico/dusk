@@ -58,11 +58,8 @@ def h_offsets(
 ):
     with levels_upward:
         with sparse[Edge > Cell > Edge]:
-            a = b[Edge > Cell > Edge] + c  # no offsets, defaults to Edge > Cell > Edge
-            a = (
-                b[Edge > Cell > Edge] + c[Edge > Cell > Edge]
-            )  # verbose version of the above
-            a = b[Edge] + c[Edge > Cell > Edge]  # center access for dense field
+            a = b[Edge > Cell > Edge] + c
+            a = b[Edge] + c
 
 
 @stencil
@@ -80,8 +77,8 @@ def hv_offsets(
     with levels_upward as k:
         with sparse[Edge > Cell > Edge]:
             a = b[Edge, k] + c
-            a = b[Edge > Cell > Edge, k + 1] + c[Edge > Cell > Edge, k]
-            a = b[Edge, k] + b[Edge, k - 1] + c[Edge > Cell > Edge]
+            a = b[Edge > Cell > Edge, k + 1] + c[k]
+            a = b[Edge, k] + b[Edge, k - 1] + c
 
 
 @stencil

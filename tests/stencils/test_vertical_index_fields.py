@@ -57,9 +57,7 @@ def various_expression(
         edge_3d_field2 = sum_over(
             Cell > Vertex > Cell > Edge,
             tan(
-                sparse_3d_field3[
-                    Cell > Vertex > Cell > Edge, sparse_3d_index_field3 + 3,
-                ]
+                sparse_3d_field3[sparse_3d_index_field3 + 3]
             )
             / edge_3d_field1[edge_3d_index_field + 1]
             + reduce_over(

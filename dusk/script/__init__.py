@@ -13,6 +13,7 @@ __all__ = [
     "K",
     "Field",
     "IndexField",
+    "Global",
     "levels_upward",
     "levels_downward",
     "sparse",
@@ -39,6 +40,7 @@ class Cell(metaclass=internal.LocationType):
 class Vertex(metaclass=internal.LocationType):
     pass
 
+
 class Origin(metaclass=internal.LocationType):
     pass
 
@@ -54,6 +56,12 @@ class Field:
 
 
 class IndexField:
+    @classmethod
+    def __class_getitem__(cls, *args) -> type:
+        pass
+
+
+class Global:
     @classmethod
     def __class_getitem__(cls, *args) -> type:
         pass

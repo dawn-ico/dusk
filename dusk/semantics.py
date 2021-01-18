@@ -17,6 +17,7 @@ class SymbolKind(Enum):
     Field = auto()
     IndexField = auto()
     VerticalIterationVariable = auto()
+    Global = auto()
 
 
 class Symbol:
@@ -39,6 +40,11 @@ class Field(Symbol):
 class IndexField(Symbol):
     kind: ClassVar[SymbolKind] = SymbolKind.IndexField
     sir: sir.Field
+
+
+@dataclass
+class Global(Symbol):
+    kind: ClassVar[SymbolKind] = SymbolKind.Global
 
 
 class Scope(Iterable[Symbol]):
@@ -96,6 +102,7 @@ class ScopeHelper:
 LocationTypeValue = NewType("LocationTypeValue", int)
 IterationSpace = namedtuple("IterationSpace", "chain, include_center")
 
+
 class LocationHelper:
 
     in_vertical_region: bool
@@ -108,7 +115,7 @@ class LocationHelper:
         return len(location_chain) <= 1
 
     @staticmethod
-    def get_field_dimension(field: sir.Field) -> LocationChain:        
+    def get_field_dimension(field: sir.Field) -> LocationChain:
         assert (
             field.field_dimensions.WhichOneof("horizontal_dimension")
             == "unstructured_horizontal_dimension"

@@ -46,6 +46,7 @@ from dusk.semantics import (
     SymbolKind,
     Field as DuskField,
     IndexField as DuskIndexField,
+    Global as DuskGlobal,
     VerticalIterationVariable,
     DuskContextHelper,
 )
@@ -104,6 +105,7 @@ class Grammar:
 
     def __init__(self):
         self.ctx = DuskContextHelper()
+        self.globals = None
 
     @transform(
         FunctionDef(
@@ -159,12 +161,20 @@ class Grammar:
     def add_field_declaration(
         self, name: str, field_type: expr, is_temporary: bool = False
     ):
+        if isinstance(field_type, Name) and field_type.id == "Global":
+            self.ctx.scope.current_scope.add(name, DuskGlobal())
+            self.globals = sir.GlobalVariableMap()
+            self.globals.map[name].double_value = 0
+            return
         field_type, [include_center, hindex], vindex = self.field_type(field_type)
+
         assert field_type in {"Field", "IndexField"}
         DuskFieldType = DuskField if field_type == "Field" else DuskIndexField
 
         if hindex is not None:
-            dimensions = make_field_dimensions_unstructured(hindex, vindex, include_center)
+            dimensions = make_field_dimensions_unstructured(
+                hindex, vindex, include_center
+            )
         else:
             dimensions = make_field_dimensions_vertical()
 
@@ -175,12 +185,15 @@ class Grammar:
     @transform(
         Subscript(
             # TODO: hardcoded string
-            value=name(Capture(OneOf("Field", "IndexField")).to("field_type")),
+            value=name(
+                Capture(OneOf("Field", "IndexField", "Global")).to("field_type")
+            ),
             slice=Index(
                 value=OneOf(
                     Tuple(
                         elts=FixedList(
-                            Capture(_).to("hindex"), name(Capture("K").to("vindex")),
+                            Capture(_).to("hindex"),
+                            name(Capture("K").to("vindex")),
                         ),
                         ctx=Load,
                     ),
@@ -208,7 +221,8 @@ class Grammar:
                         left=name(Capture(str).append("locations")),
                         op=Add,
                         right=name(Capture(str).append("locations")),
-                    )),
+                    ),
+                ),
                 ops=Repeat(Gt),
                 comparators=Repeat(name(Capture(str).append("locations"))),
             ),
@@ -216,10 +230,10 @@ class Grammar:
     )
     def location_chain(self, locations: t.List):
         inlcude_center = False
-        if (locations[0] == 'Origin'):
+        if locations[0] == "Origin":
             inlcude_center = True
             locations = locations[1:]
-        locs = [self.location_type(location) for location in locations]       
+        locs = [self.location_type(location) for location in locations]
         return inlcude_center, [self.location_type(location) for location in locations]
 
     @transform(Capture(str).to("name"))
@@ -459,7 +473,10 @@ class Grammar:
             # TODO: does `str` really work here? (what about NaNs, precision, 1e11 notation, etc)
             value = str(value)
 
-        return make_literal_access_expr(value, _type,)
+        return make_literal_access_expr(
+            value,
+            _type,
+        )
 
     @transform(Name(id=Capture(str).to("name"), ctx=AnyContext))
     def var(self, name: str, index: expr = None):
@@ -470,6 +487,8 @@ class Grammar:
         symbol = self.ctx.scope.current_scope.fetch(name)
         if isinstance(symbol, DuskField):
             return self.field_access_expr(symbol, index)
+        elif isinstance(symbol, DuskGlobal):
+            return make_var_access_expr(name, is_external=True)
         else:
             raise DuskInternalError(
                 f"Encountered unknown symbol type '{symbol}' ('{name}')!"
@@ -515,7 +534,9 @@ class Grammar:
         voffset, vbase = (
             self.relative_vertical_offset(vindex) if vindex is not None else (0, None)
         )
-        [include_center, hindex] = self.location_chain(hindex) if hindex is not None else [False, None]        
+        [include_center, hindex] = (
+            self.location_chain(hindex) if hindex is not None else [False, None]
+        )
 
         if not self.ctx.location.in_neighbor_iteration:
             if hindex is not None:
@@ -523,21 +544,21 @@ class Grammar:
                     f"Invalid horizontal index for field '{field.sir.name}' "
                     "outside of neighbor iteration!"
                 )
-            return make_unstructured_offset(False), voffset, vbase                   
-        neighbor_chain = self.ctx.location.current_neighbor_iteration.chain        
+            return make_unstructured_offset(False), voffset, vbase
+        neighbor_chain = self.ctx.location.current_neighbor_iteration.chain
         field_dimension = self.ctx.location.get_field_dimension(field.sir)
 
         if not self.ctx.location.is_ambiguous(neighbor_chain) and include_center:
             raise DuskSyntaxError(
-                    f"including the center is only allowed if start equals end location of the neighbor chain!"
-                )
+                f"including the center is only allowed if start equals end location of the neighbor chain!"
+            )
 
         # TODO: `vindex` is _non-sensical_ if the field is 2d
 
         # TODO: we should check that `field_dimension` is valid for
         #       the current neighbor iteration(s?)
 
-        if hindex is None:           
+        if hindex is None:
             if self.ctx.location.is_dense(field_dimension):
                 if self.ctx.location.is_ambiguous(neighbor_chain):
                     raise DuskSyntaxError(
@@ -546,18 +567,19 @@ class Grammar:
                     )
 
                 return (
-                    make_unstructured_offset(
-                        field_dimension[0] == neighbor_chain[-1]
-                    ),
+                    make_unstructured_offset(field_dimension[0] == neighbor_chain[-1]),
                     voffset,
                     vbase,
                 )
             return make_unstructured_offset(True), voffset, vbase
 
         # TODO: check if `hindex` is valid for this field's location type
-        
-        if self.ctx.location.is_dense(field_dimension) and self.ctx.location.current_neighbor_iteration.include_center:
-            assert(self.ctx.location.is_ambiguous(neighbor_chain))
+
+        if (
+            self.ctx.location.is_dense(field_dimension)
+            and self.ctx.location.current_neighbor_iteration.include_center
+        ):
+            assert self.ctx.location.is_ambiguous(neighbor_chain)
             if not include_center:
                 raise DuskSyntaxError(
                     f"Invalid horizontal offset for field '{field.sir.name}'! "
@@ -718,9 +740,13 @@ class Grammar:
         return make_ternary_operator(condition, body, orelse)
 
     @transform(
-        Capture(Call(func=name(Capture(str).to("name")), args=_, keywords=_,)).to(
-            "node"
-        )
+        Capture(
+            Call(
+                func=name(Capture(str).to("name")),
+                args=_,
+                keywords=_,
+            )
+        ).to("node")
     )
     def funcall(self, name: str, node: Call):
         # TODO: bad hardcoded string
@@ -801,7 +827,10 @@ class Grammar:
                 # TODO: bad hardcoded string
                 Capture(OneOf("sum_over", "min_over", "max_over")).to("short_cut_name")
             ),
-            args=FixedList(Capture(expr).to("neighborhood"), Capture(expr).to("expr"),),
+            args=FixedList(
+                Capture(expr).to("neighborhood"),
+                Capture(expr).to("expr"),
+            ),
             keywords=Repeat(
                 keyword(
                     arg=Capture(str).append("kwargs_keys"),
@@ -838,7 +867,7 @@ class Grammar:
         wrong_kwargs = kwargs.keys() - {"init", "weights"}
         if 0 < len(wrong_kwargs):
             raise DuskSyntaxError(f"Unsupported kwargs '{wrong_kwargs}' in reduction!")
-        
+
         include_center, neighborhood = self.location_chain(neighborhood)
         with self.ctx.location.reduction(neighborhood, include_center):
             expr = self.expression(expr)
@@ -874,4 +903,6 @@ class Grammar:
             # TODO: check for `kwargs["weight"].ctx == Load`?
             weights = [self.expression(weight) for weight in kwargs["weights"].elts]
 
-        return make_reduction_over_neighbor_expr(op, expr, init, neighborhood, weights, include_center)
+        return make_reduction_over_neighbor_expr(
+            op, expr, init, neighborhood, weights, include_center
+        )

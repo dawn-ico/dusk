@@ -36,7 +36,10 @@ def various_reductions(
                 - sum_over(
                     Edge > Cell,
                     sqrt(cell),
-                    weights=[edge[Edge], arcsin(edge[Edge] * 100),],
+                    weights=[
+                        edge[Edge],
+                        arcsin(edge[Edge] * 100),
+                    ],
                 ),
             ),
             mul,
@@ -80,8 +83,6 @@ def kw_args(
 
 
 @stencil
-def reductions_with_center(
-    a: Field[Edge], b: Field[Origin + Edge > Cell > Edge], c: Field[Edge]
-):
+def reductions_with_a_global(a: Field[Edge], dt: Global):
     with levels_downward:
-        a = sum_over(Origin + Edge > Cell > Edge, b*c[Origin + Edge > Cell > Edge])
+        a = dt

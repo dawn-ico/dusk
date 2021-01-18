@@ -60,7 +60,15 @@ def pyast_to_sir(stencils: List[ast.FunctionDef], filename: str = "<unknown>") -
     # TODO: handle errors in different stencils separately
     stencils = [grammar.stencil(stencil) for stencil in stencils]
 
-    return make_sir(filename, GridType.Value("Unstructured"), stencils)
+    if grammar.globals is not None:
+        return make_sir(
+            filename,
+            GridType.Value("Unstructured"),
+            stencils,
+            global_variables=grammar.globals,
+        )
+    else:
+        return make_sir(filename, GridType.Value("Unstructured"), stencils)
 
 
 def sir_to_cpp(

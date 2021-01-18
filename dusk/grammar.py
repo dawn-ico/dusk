@@ -159,7 +159,7 @@ class Grammar:
     def add_field_declaration(
         self, name: str, field_type: expr, is_temporary: bool = False
     ):
-        field_type, [include_center, hindex], vindex = self.field_type(field_type)
+        field_type, (include_center, hindex), vindex = self.field_type(field_type)
         assert field_type in {"Field", "IndexField"}
         DuskFieldType = DuskField if field_type == "Field" else DuskIndexField
 
@@ -197,7 +197,7 @@ class Grammar:
     def field_type(self, field_type: str, hindex: expr = None, vindex: str = None):
         return (
             field_type,
-            self.location_chain(hindex) if hindex is not None else [False, None],
+            self.location_chain(hindex) if hindex is not None else (False, None),
             1 if vindex is not None else 0,
         )
 
@@ -208,7 +208,8 @@ class Grammar:
                 left=OneOf(
                     name(Capture(str).append("locations")),
                     BinOp(
-                        left=name(Capture(str).append("locations")),
+                        # TODO: hardcoded strings
+                        left=name(Capture("Origin").to("include_center")),
                         op=Add,
                         right=name(Capture(str).append("locations")),
                     ),
@@ -218,13 +219,17 @@ class Grammar:
             ),
         )
     )
-    def location_chain(self, locations: t.List):
-        inlcude_center = False
-        if locations[0] == "Origin":
-            inlcude_center = True
-            locations = locations[1:]
-        locs = [self.location_type(location) for location in locations]
-        return inlcude_center, [self.location_type(location) for location in locations]
+    def location_chain(
+        self, locations: t.List, include_center: t.Optional[t.Literal["Origin"]] = None
+    ):
+        does_include_center = include_center is not None
+        locations = [self.location_type(location) for location in locations]
+
+        if does_include_center and not self.ctx.location.is_ambiguous(locations):
+            raise DuskSyntaxError(
+                f"including the center is only allowed if start equals end location of the neighbor chain!"
+            )
+        return does_include_center, locations
 
     @transform(Capture(str).to("name"))
     def location_type(self, name: str):
@@ -522,8 +527,8 @@ class Grammar:
         voffset, vbase = (
             self.relative_vertical_offset(vindex) if vindex is not None else (0, None)
         )
-        [include_center, hindex] = (
-            self.location_chain(hindex) if hindex is not None else [False, None]
+        include_center, hindex = (
+            self.location_chain(hindex) if hindex is not None else (False, None)
         )
 
         if not self.ctx.location.in_neighbor_iteration:
@@ -540,11 +545,6 @@ class Grammar:
             raise DuskSyntaxError(
                 f"Invalid horizontal offset for field '{field.sir.name}',"
                 "sparse fields do not take an offset (only non-offset read makes sense)!"
-            )
-
-        if not self.ctx.location.is_ambiguous(neighbor_chain) and include_center:
-            raise DuskSyntaxError(
-                f"including the center is only allowed if start equals end location of the neighbor chain!"
             )
 
         # TODO: `vindex` is _non-sensical_ if the field is 2d
@@ -571,15 +571,13 @@ class Grammar:
         # TODO: check if `hindex` is valid for this field's location type
 
         if (
-            self.ctx.location.is_dense(field_dimension)
-            and self.ctx.location.current_neighbor_iteration.include_center
+            self.ctx.location.current_neighbor_iteration.include_center
+            != include_center
         ):
-            assert self.ctx.location.is_ambiguous(neighbor_chain)
-            if not include_center:
-                raise DuskSyntaxError(
-                    f"Invalid horizontal offset for field '{field.sir.name}'! "
-                    "inconsistent center inclusion"
-                )
+            raise DuskSyntaxError(
+                f"Invalid horizontal offset for field '{field.sir.name}'! "
+                "inconsistent center inclusion"
+            )
 
         if len(hindex) == 1:
             if neighbor_chain[0] != hindex[0]:

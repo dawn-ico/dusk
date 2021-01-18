@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from ast import AST, stmt, expr
+import ast
 
 from dusk.errors import ASTError
 from dusk.util import pprint_matcher as pprint
@@ -16,8 +16,10 @@ __all__ = [
     "Optional",
     "Capture",
     "FixedList",
+    "EmptyList",
     "BreakPoint",
     "NoMatch",
+    "name",
 ]
 
 
@@ -53,6 +55,9 @@ class FixedList(Matcher):
 
         for matcher, node in zip(self.matchers, nodes):
             match(matcher, node, **kwargs)
+
+
+EmptyList = FixedList()
 
 
 class Repeat(Matcher):
@@ -162,11 +167,15 @@ class BreakPoint(Matcher):
         match(self.matcher, node, **kwargs)
 
 
+def name(id, ctx=ast.Load) -> ast.Name:
+    return ast.Name(id=id, ctx=ctx)
+
+
 def match(matcher, node, **kwargs) -> None:
     # this should be probably more flexible than hardcoding all possibilities
     if isinstance(matcher, Matcher):
         matcher.match(node, **kwargs)
-    elif isinstance(matcher, AST):
+    elif isinstance(matcher, ast.AST):
         match_ast(matcher, node, **kwargs)
     elif isinstance(matcher, type):
         match_type(matcher, node, **kwargs)
@@ -184,7 +193,7 @@ def does_match(matcher, node, **kwargs) -> bool:
         return False
 
 
-def match_ast(matcher: AST, node, **kwargs):
+def match_ast(matcher: ast.AST, node, **kwargs):
     if not isinstance(node, type(matcher)):
         raise NoMatch(
             f"Expected node type '{type(matcher)}', but got '{type(node)}'!", node
@@ -194,7 +203,7 @@ def match_ast(matcher: AST, node, **kwargs):
         try:
             match(getattr(matcher, field), getattr(node, field), **kwargs)
         except NoMatch as e:
-            if e.loc is None and isinstance(node, (stmt, expr)):
+            if e.loc is None and isinstance(node, (ast.stmt, ast.expr)):
                 # add location info if possible
                 e.loc_from_node(node)
             raise e

@@ -40,6 +40,8 @@ from dusk.match import (
     Capture,
     Repeat,
     FixedList,
+    EmptyList,
+    name,
     BreakPoint,
 )
 from dusk.semantics import (
@@ -61,12 +63,7 @@ from dusk.util import pprint_matcher as pprint
 
 
 # Short cuts
-EmptyList = FixedList()
 AnyContext = OneOf(Load, Store, Del, AugLoad, AugStore, Param)
-
-
-def name(id, ctx=Load) -> Name:
-    return Name(id=id, ctx=ctx)
 
 
 def transform(matcher) -> t.Callable:
@@ -94,6 +91,9 @@ def dispatch(rules: t.Dict[t.Any, t.Callable], node):
 class Grammar:
     def __init__(self):
         self.ctx = DuskContextHelper()
+
+    # TODO: somewhere we should check that the function is a valid stencil
+    # e.g., no kwargs etc, mostly `Grammar.stencil` without capturing/processing
 
     @transform(
         FunctionDef(

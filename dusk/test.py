@@ -1,6 +1,6 @@
 from typing import Callable
 
-from dusk.integration import StencilObject
+from dusk.integration import StencilObject, stencil_collection
 from dusk.transpile import validate as validate_sir, stencil_object_to_sir
 
 
@@ -14,8 +14,11 @@ def stencil_test(validate: bool = True) -> Callable:
     def decorator(stencil: Callable) -> Callable:
         assert stencil.__name__.startswith("test_")
 
+        stencil_object = StencilObject(stencil)
+        stencil_collection.append(stencil_object)
+
         def test_stencil() -> None:
-            sir = stencil_object_to_sir(StencilObject(stencil))
+            sir = stencil_object_to_sir(stencil_object)
             if validate:
                 validate_sir(sir)
 

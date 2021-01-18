@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import NewType, Optional, ClassVar, Iterator, Iterable, List, Dict
+from typing import NewType, Optional, ClassVar, Iterator, List, Dict
 
 from enum import Enum, auto, unique
 from dataclasses import dataclass
@@ -44,7 +44,6 @@ class Scope:
     symbols: Dict[str, Symbol]
     parent: Optional[Scope]
 
-    # TODO: better error messages
     def __init__(self, parent: Optional[Scope] = None) -> None:
         self.symbols = {}
         self.parent = parent
@@ -61,11 +60,11 @@ class Scope:
             return self.symbols[name]
         if self.parent is not None:
             return self.parent.fetch(name)
-        raise KeyError
+        raise KeyError(f"Couldn't find symbol '{name}' in scope!")
 
     def add(self, name: str, symbol: Symbol) -> None:
         if self.contains(name):
-            raise KeyError
+            raise KeyError(f"Symbol '{name}' already exists in scope!")
 
         self.symbols[name] = symbol
 

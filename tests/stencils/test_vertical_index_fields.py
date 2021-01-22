@@ -13,7 +13,7 @@ def test_simple_example(
     cell_3d_index_field: IndexField[Cell, K],
 ):
 
-    with levels_upward:
+    with domain.upward:
         edge_3d_field2 = edge_3d_field1[edge_3d_index_field + 1]
 
         edge_3d_field1 = sum_over(
@@ -34,7 +34,7 @@ def test_various_expression(
     sparse_3d_index_field3: IndexField[Cell > Vertex > Cell > Edge, K],
     edge_3d_index_field: IndexField[Edge, K],
 ):
-    with levels_upward[30:-4] as k:
+    with domain.upward[30:-4] as k:
         edge_3d_field1 = min_over(
             Edge > Cell > Vertex > Cell,
             sin(sparse_3d_field1)
@@ -82,7 +82,7 @@ def test_index_fields_with_offsets(
     edge_3d_index_field: IndexField[Edge, K],
 ):
 
-    with levels_downward as k:
+    with domain.downward as k:
         cell_3d_field1 = cell_3d_field2[cell_3d_index_field + 1]
         cell_3d_field1 = cell_3d_field2[cell_3d_index_field + 0]
         cell_3d_field1 = cell_3d_field2[cell_3d_index_field - 1]
@@ -133,13 +133,13 @@ def test_various_dimensions_mix(
     cell_3d_index_field: IndexField[Cell, K],
     any_1d_index_field: IndexField[K],
 ):
-    with levels_upward:
+    with domain.upward:
         # 3d fields with 3d index fields
         vertex_3d_field2 = vertex_3d_field1[vertex_3d_index_field]
         edge_3d_field2 = edge_3d_field1[edge_3d_index_field]
         cell_3d_field2 = cell_3d_field1[cell_3d_index_field]
 
-    with levels_downward[3:-5] as k:
+    with domain.downward[3:-5] as k:
         # 3d fields with 2d index fields
         vertex_3d_field2 = vertex_3d_field1[vertex_2d_index_field]
         edge_3d_field2 = edge_3d_field1[edge_2d_index_field]
@@ -155,7 +155,7 @@ def test_various_dimensions_mix(
         edge_2d_field = edge_3d_field1[edge_3d_index_field]
         cell_2d_field = cell_3d_field1[cell_3d_index_field]
 
-    with levels_downward[:20] as levels:
+    with domain.downward[:20] as levels:
         # 2d fields with 2d index fields
         vertex_2d_field = vertex_3d_field1[vertex_2d_index_field]
         edge_2d_field = edge_3d_field1[edge_2d_index_field]
@@ -180,7 +180,7 @@ def test_sparse_index_fields(
     cell_3d_field: Field[Cell, K],
     cell_2d_field: Field[Cell],
 ):
-    with levels_downward[2:50] as levels:
+    with domain.downward[2:50] as levels:
         # 3d sparse field with 3d sparse index field
         edge_3d_field = sum_over(
             Edge > Cell > Vertex, sparse_3d_field1[sparse_3d_index_field1]

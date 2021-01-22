@@ -28,6 +28,7 @@ class SymbolResolver:
     # TODO: check preconditions?
     # TODO: check postconditions?
 
+    stencil_object: StencilObject
     externals: DictScope[t.Any]
     api_fields: DictScope[t.Any]
     temp_fields: DictScope[t.Any]
@@ -67,6 +68,8 @@ class SymbolResolver:
         self.api_fields = DictScope(parent=self.externals)
         self.temp_fields = DictScope(parent=self.api_fields)
         self._current_scope = self.temp_fields
+
+        stencil_object.stencil_scope = self.temp_fields
 
     def resolve_symbols(self):
         self.stencil(self.stencil_object.pyast)

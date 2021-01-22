@@ -5,6 +5,9 @@ import typing as t
 import enum
 import dataclasses
 
+import dawn4py.serialization.utils as ser
+import dawn4py.serialization.SIR as sir
+
 from dusk.errors import SemanticError
 
 
@@ -49,31 +52,121 @@ class VerticalIterationDirection(enum.Enum):
     UPWARD = enum.auto()
     DOWNWARD = enum.auto()
 
+    def to_sir(self):
+        assert (
+            self is VerticalIterationDirection.UPWARD
+            or self is VerticalIterationDirection.DOWNWARD
+        )
+        if self is VerticalIterationDirection.UPWARD:
+            return sir.VerticalRegion.LoopOrder.Value("Forward")
+        return sir.VerticalRegion.LoopOrder.Value("Backward")
+
 
 class VerticalIterationDomain:
-    # TODO: implement properly + SIR encoding
-    _index: t.Any
 
-    def __init__(self, index=None):
-        self._index = index
+    # unlike python semantics, end is inclusive here
+
+    start: t.Optional[int]
+    end: t.Optional[int]
+
+    def __init__(self, start: t.Optional[int] = None, end: t.Optional[int] = None):
+        self.start = start
+        self.end = end
+
+    def to_sir(self) -> t.Optional[sir.Interval]:
+
+        sir_start = sir.Interval.SpecialLevel.Value("Start")
+        sir_end = sir.Interval.SpecialLevel.Value("End")
+
+        if self.start is None:
+            lower_level, lower_offset = sir_start, 0
+        elif 0 <= self.start:
+            lower_level, lower_offset = sir_start, self.start
+        else:
+            lower_level, lower_offset = sir_end, self.start
+
+        if self.end is None:
+            upper_level, upper_offset = sir_end, 0
+        elif 0 <= self.end:
+            upper_level, upper_offset = sir_start, self.end
+        else:
+            upper_level, upper_offset = sir_end, self.end
+
+        return ser.make_interval(
+            lower_level=lower_level,
+            lower_offset=lower_offset,
+            upper_level=upper_level,
+            upper_offset=upper_offset,
+        )
 
     @classmethod
     def from_index(cls, index) -> VerticalIterationDomain:
-        # TODO: check that `index` is valid
-        return cls(index)
+        if isinstance(index, int):
+            return cls(index, index)
+
+        if isinstance(index, slice):
+            if index.step is not None:
+                raise SemanticError("Cannot specify step sice for vertical intervals!")
+            return cls(index.start, index.stop)
+
+        raise SemanticError("Invalid vertical interval (expected `int` or `slice`)!")
+
+
+class HorizontalMarker(CompileTimeConstant):
+    encoding: int
+    offset: int
+
+    def __init__(self, encoding: int, offset: int = 0):
+        self.encoding = encoding
+        self.offset = offset
+
+    def __add__(self, other) -> t.Union[HorizontalMarker, t.Type[NotImplemented]]:
+        if not isinstance(other, int):
+            return NotImplemented
+        return HorizontalMarker(encoding=self.encoding, offset=self.offset + other)
+
+    def __sub__(self, other) -> t.Union[HorizontalMarker, t.Type[NotImplemented]]:
+        if not isinstance(other, int):
+            return NotImplemented
+        return HorizontalMarker(encoding=self.encoding, offset=self.offset - other)
 
 
 class HorizontalIterationDomain:
-    # TODO: implement properly + SIR encoding
-    _index: t.Any
 
-    def __init__(self, index=None):
-        self._index = index
+    HorizontalRegion = t.Optional[t.Tuple[HorizontalMarker, HorizontalMarker]]
+
+    region: HorizontalRegion
+
+    def __init__(self, region: HorizontalRegion = None):
+        self.region = region
+
+    def to_sir(self) -> t.Optional[sir.Interval]:
+        if self.region is None:
+            return None
+
+        start, end = self.region
+
+        return ser.make_magic_num_interval(
+            lower_level=start.encoding,
+            lower_offset=start.offset,
+            upper_level=end.encoding,
+            upper_offset=end.offset,
+        )
 
     @classmethod
-    def from_index(cls, index) -> VerticalIterationDomain:
-        # TODO: check that `index` is valid
-        return cls(index)
+    def from_index(cls, index) -> HorizontalIterationDomain:
+
+        if (
+            isinstance(index, slice)
+            and index.step is None
+            and isinstance(index.start, HorizontalMarker)
+            and isinstance(index.stop, HorizontalMarker)
+        ):
+            return cls((index.start, index.stop))
+
+        raise SemanticError(
+            "Horizontal iteration domain must be a slice starting from and ending in horizontal markers!"
+        )
 
 
 @dataclasses.dataclass
@@ -140,8 +233,3 @@ class Domain(CompileTimeConstant):
 
 class SparseFill(Slicable, ContextManager):
     pass
-
-
-class HorizontalMarker:
-    def __init__(self, encoding: int):
-        self.__encoding = encoding

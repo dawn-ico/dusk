@@ -1,4 +1,4 @@
-from typing import Optional, Callable, List
+from typing import Any, Optional, Callable, List
 
 from importlib.util import spec_from_file_location, module_from_spec
 import ast
@@ -9,6 +9,7 @@ import dawn4py.serialization.SIR as sir
 class StencilObject:
     callable: Callable
     filename: str
+    stencil_scope: Any
     pyast: Optional[ast.FunctionDef] = None
     globals: Optional[sir.GlobalVariableMap]
     sir_node: Optional[sir.SIR] = None

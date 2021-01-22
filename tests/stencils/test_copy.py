@@ -4,19 +4,19 @@ from dusk.test import stencil_test
 
 @stencil_test()
 def test_copy_only_vertex(input: Field[Vertex], output: Field[Vertex]):
-    with levels_upward:
+    with domain.upward:
         output = input
 
 
 @stencil_test()
 def test_copy_only_edge(input: Field[Edge], output: Field[Edge]):
-    with levels_upward:
+    with domain.upward:
         output = input
 
 
 @stencil_test()
 def test_copy_only_cell(input: Field[Cell], output: Field[Cell]):
-    with levels_upward:
+    with domain.upward:
         output = input
 
 
@@ -29,13 +29,13 @@ def test_copy_all_separate(
     input_cell: Field[Cell],
     output_cell: Field[Cell],
 ):
-    with levels_upward:
+    with domain.upward:
         output_vertex = input_vertex
 
-    with levels_upward:
+    with domain.upward:
         output_edge = input_edge
 
-    with levels_upward:
+    with domain.upward:
         output_cell = input_cell
 
 
@@ -48,7 +48,7 @@ def test_copy_all_together(
     input_cell: Field[Cell],
     output_cell: Field[Cell],
 ):
-    with levels_upward:
+    with domain.upward:
         output_vertex = input_vertex
         output_edge = input_edge
         output_cell = input_cell

@@ -18,8 +18,6 @@ __all__ = [
     "Field",
     "IndexField",
     "domain",
-    "levels_upward",
-    "levels_downward",
     "HorizontalDomains",
     "sparse",
     "reduce_over",
@@ -28,10 +26,6 @@ __all__ = [
     "min_over",
     "max_over",
 ] + __math_all__
-
-
-# FIXME: remove this hack when `domain` properly works
-levels_upward = levels_downward = "levels_hack"
 
 
 def stencil(stencil: typing.Callable) -> typing.Callable:

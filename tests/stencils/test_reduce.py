@@ -17,7 +17,7 @@ def test_various_reductions(
     sparse2: Field[Cell > Edge > Cell > Edge > Cell > Edge],
     sparse3: Field[Cell > Vertex > Cell > Vertex > Cell > Edge],
 ):
-    with levels_upward:
+    with domain.upward:
         edge = sum_over(Edge > Cell, cell * ec)
 
         cell = max_over(Cell > Vertex, pow(vertex, cv / cell))
@@ -53,7 +53,7 @@ def test_various_reductions(
 def test_kw_args(
     a: Field[Edge], b: Field[Edge], c: Field[Edge > Cell], d: Field[Edge > Cell]
 ):
-    with levels_downward:
+    with domain.downward:
 
         # reductions without weights
         a = reduce_over(Edge > Cell, c * 3, sum, init=0.0)
@@ -81,5 +81,5 @@ def test_kw_args(
 def test_reductions_with_center(
     a: Field[Edge], b: Field[Origin + Edge > Cell > Edge], c: Field[Edge]
 ):
-    with levels_downward:
+    with domain.downward:
         a = sum_over(Origin + Edge > Cell > Edge, b * c[Origin + Edge > Cell > Edge])

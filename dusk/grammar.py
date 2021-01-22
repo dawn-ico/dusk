@@ -44,6 +44,7 @@ from dusk.match import (
     name,
     BreakPoint,
 )
+from dusk.passes.constant_folder import DUSK_CONSTANT_KIND
 from dusk.semantics import (
     Symbol,
     SymbolKind,
@@ -52,7 +53,7 @@ from dusk.semantics import (
     VerticalIterationVariable,
     DuskContextHelper,
 )
-from dusk.script import stencil as stencil_decorator
+from dusk.script import internal
 from dusk.script.stubs import (
     LOCATION_TYPES,
     UNARY_MATH_FUNCTIONS,
@@ -328,58 +329,37 @@ class Grammar:
         return make_if_stmt(condition, body, orelse)
 
     @transform(
-        With(
-            items=FixedList(
-                # TODO: hardcoded strings
-                withitem(
-                    context_expr=OneOf(
-                        name(
-                            Capture(OneOf("levels_upward", "levels_downward")).to(
-                                "order"
-                            ),
+        BreakPoint(
+            With(
+                items=FixedList(
+                    # TODO: hardcoded strings
+                    withitem(
+                        context_expr=Constant(
+                            value=Capture(internal.Domain).to("domain"),
+                            kind=DUSK_CONSTANT_KIND,
                         ),
-                        Subscript(
-                            value=name(
-                                id=Capture(
-                                    OneOf("levels_upward", "levels_downward")
-                                ).to("order")
-                            ),
-                            slice=Slice(
-                                lower=Capture(_).to("lower"),
-                                upper=Capture(_).to("upper"),
-                                step=None,
-                            ),
-                            ctx=Load,
-                        ),
+                        optional_vars=Optional(name(Capture(str).to("var"), ctx=Store)),
                     ),
-                    optional_vars=Optional(name(Capture(str).to("var"), ctx=Store)),
                 ),
+                body=Capture(_).to("body"),
+                type_comment=None,
             ),
-            body=Capture(_).to("body"),
-            type_comment=None,
-        ),
+            active=False,
+        )
     )
-    def vertical_loop(self, order, body, upper=None, lower=None, var: str = None):
+    def vertical_loop(self, domain: internal.Domain, body, var: str = None):
 
-        if lower is None:
-            lower_level, lower_offset = sir.Interval.Start, 0
-        else:
-            lower_level, lower_offset = self.vertical_interval_bound(lower)
+        # FIXME: gracefully handle if the domain can't be constant folded
 
-        if upper is None:
-            upper_level, upper_offset = sir.Interval.End, 0
-        else:
-            upper_level, upper_offset = self.vertical_interval_bound(upper)
+        if not domain.valid():
+            raise SemanticError("Invalid domain!")
 
-        order_mapper = {
-            "levels_upward": sir.VerticalRegion.Forward,
-            "levels_downward": sir.VerticalRegion.Backward,
-        }
         with self.ctx.vertical_region(var):
             return make_vertical_region_decl_stmt(
-                make_ast(self.statements(body)),
-                make_interval(lower_level, upper_level, lower_offset, upper_offset),
-                order_mapper[order],
+                ast=make_ast(self.statements(body)),
+                interval=domain.vertical_domain.to_sir(),
+                loop_order=domain.vertical_direction.to_sir(),
+                IRange=domain.horizontal_domain.to_sir(),
             )
 
     # TODO: richer vertical interval bounds
@@ -399,7 +379,7 @@ class Grammar:
     @transform(
         With(
             items=FixedList(
-                # TODO: bad hardcoded string `neighbors`
+                # TODO: bad hardcoded string `sparse`
                 withitem(
                     context_expr=Subscript(
                         value=name(id="sparse"),
@@ -421,12 +401,12 @@ class Grammar:
 
         return make_loop_stmt(body, neighborhood, include_center)
 
-    @transform(Capture(expr).to("expr"))
-    def expression(self, expr: expr):
+    @transform(Capture(OneOf(bool, int, float, expr)).to("expr"))
+    def expression(self, expr: t.Union[bool, int, float, expr]):
         return make_expr(
             dispatch(
                 {
-                    Constant: self.constant,
+                    OneOf(bool, int, float, Constant): self.constant,
                     Name: self.var,
                     Subscript: self.subscript,
                     UnaryOp: self.unop,
@@ -440,8 +420,13 @@ class Grammar:
             )
         )
 
-    @transform(Constant(value=Capture(_).to("value"), kind=None))
-    def constant(self, value):
+    @transform(
+        OneOf(
+            Constant(value=Capture(_).to("value"), kind=Optional(str)),
+            Capture(OneOf(bool, int, float)).to("value"),
+        )
+    )
+    def constant(self, value: Any):
         # TODO: properly distinguish between float and double
         built_in_type_map = {bool: "Boolean", int: "Integer", float: "Double"}
 
@@ -887,9 +872,17 @@ class Grammar:
 
         weights = None
         if "weights" in kwargs:
-            # TODO: check for `kwargs["weight"].ctx == Load`?
-            weights = [self.expression(weight) for weight in kwargs["weights"].elts]
+            weights = self.list_of_expressions(kwargs["weights"])
 
         return make_reduction_over_neighbor_expr(
             op, expr, init, neighborhood, weights, include_center
         )
+
+    @transform(
+        OneOf(
+            List(elts=Capture(list).to("exprs"), ctx=AnyContext),
+            Constant(value=Capture(list).to("exprs"), kind=DUSK_CONSTANT_KIND),
+        )
+    )
+    def list_of_expressions(self, exprs: list):
+        return [self.expression(expr) for expr in exprs]

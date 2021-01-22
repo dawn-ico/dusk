@@ -25,6 +25,7 @@ def merge_sirs(sirs: List[sir.SIR], filename: Optional[str] = None):
             filename = "<unknown>"
 
     stencils = [stencil for sir in sirs for stencil in sir.stencils]
+    # FIXME: globals
     return ser.make_sir(filename, sir.GridType.Value("Unstructured"), stencils)
 
 

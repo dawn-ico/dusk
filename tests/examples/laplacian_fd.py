@@ -11,7 +11,7 @@ def laplacian_fd(
 
     temp_edge: Field[Edge, K]
 
-    with levels_upward:
+    with domain.upward:
 
         # compute nabla2 using the diamond reduction
         nabla2 = sum_over(

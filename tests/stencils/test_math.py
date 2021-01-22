@@ -5,7 +5,7 @@ from dusk.test import stencil_test
 @stencil_test()
 def test_math_stencil(a: Field[Cell], b: Field[Cell], c: Field[Cell], d: Field[Cell]):
 
-    with levels_upward:
+    with domain.upward:
 
         a = sqrt(b)
         b = exp(c)

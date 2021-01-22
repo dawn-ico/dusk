@@ -8,6 +8,7 @@ from dusk.integration import StencilObject
 from dusk.grammar import Grammar
 from dusk.passes.symbol_resolution import resolve_symbols
 from dusk.passes.resolve_globals import resolve_globals
+from dusk.passes.constant_folder import constant_fold
 
 
 def stencil_object_to_sir(stencil_object: StencilObject) -> sir.Stencil:
@@ -15,6 +16,7 @@ def stencil_object_to_sir(stencil_object: StencilObject) -> sir.Stencil:
     add_filename(stencil_object)
     add_pyast(stencil_object)
     resolve_symbols(stencil_object)
+    constant_fold(stencil_object)
     resolve_globals(stencil_object)
     add_sir(stencil_object)
 
@@ -32,6 +34,7 @@ def add_pyast(stencil_object: StencilObject) -> None:
         source,
         filename=stencil_object.filename,
         type_comments=True,
+        feature_version=(3, 8),
     )
     assert isinstance(stencil_ast, ast.Module)
     assert len(stencil_ast.body) == 1

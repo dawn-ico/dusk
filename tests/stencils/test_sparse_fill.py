@@ -18,7 +18,7 @@ def test_sparse_order_2_fill(
     ce: Field[Cell > Edge, K],
 ):
 
-    with levels_upward:
+    with domain.upward:
 
         with sparse[Vertex > Edge]:
             ve1 = edge + 5 * ve2 + log(vertex)
@@ -40,15 +40,15 @@ def test_longer_fills(
     sparse2: Field[Cell > Edge > Cell > Edge > Cell > Edge],
     sparse3: Field[Edge > Cell > Vertex > Edge > Vertex > Edge],
 ):
-    with levels_upward:
+    with domain.upward:
         with sparse[Vertex > Edge > Cell > Vertex > Edge > Cell]:
             sparse1 = 50
 
-    with levels_upward:
+    with domain.upward:
         with sparse[Cell > Edge > Cell > Edge > Cell > Edge]:
             sparse2 = 50
 
-    with levels_upward:
+    with domain.upward:
         with sparse[Edge > Cell > Vertex > Edge > Vertex > Edge]:
             sparse3 = 50
 
@@ -61,17 +61,17 @@ def test_fill_with_reduction(
     edge: Field[Edge, K],
     cell: Field[Cell],
 ):
-    with levels_upward:
+    with domain.upward:
         with sparse[Edge > Cell > Vertex]:
             sparse1 = sum_over(Vertex > Cell, cell)
             sparse2 = min_over(Vertex > Edge, edge)
 
-    with levels_upward:
+    with domain.upward:
         with sparse[Edge > Cell > Vertex]:
             sparse1 = sum_over(Edge > Vertex, vertex[Edge > Vertex])
             sparse2 = sum_over(Edge > Cell, cell)
 
-    with levels_upward:
+    with domain.upward:
         with sparse[Edge > Cell > Vertex]:
             sparse1 = sum_over(Vertex > Cell > Vertex, vertex[Vertex])
             sparse2 = min_over(Vertex > Edge > Vertex, vertex[Vertex > Edge > Vertex])
@@ -84,11 +84,11 @@ def test_ambiguous_fill(
     edge1: Field[Edge, K],
     edge2: Field[Edge, K],
 ):
-    with levels_downward:
+    with domain.downward:
         with sparse[Edge > Cell > Edge]:
             sparse1 = edge1[Edge] + 2 * edge2[Edge > Cell > Edge]
 
-    with levels_downward:
+    with domain.downward:
         with sparse[Edge > Vertex > Edge]:
             sparse2 = edge2[Edge] - 4 * edge1[Edge > Vertex > Edge]
 
@@ -98,6 +98,6 @@ def test_fill_with_center(
     sparse1: Field[Origin + Edge > Cell > Edge],
     edge: Field[Edge],
 ):
-    with levels_downward:
+    with domain.downward:
         with sparse[Origin + Edge > Cell > Edge]:
             sparse1 = edge[Origin + Edge > Cell > Edge]

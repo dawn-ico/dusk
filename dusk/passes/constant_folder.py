@@ -32,21 +32,26 @@ def inline_compiletime_constants(stencil_object: integration.StencilObject) -> N
 
 def constant_fold_expr(stencil_object: integration.StencilObject) -> None:
     for node, setter in post_order_mut_iter(stencil_object.pyast.body):
-        if expr_is_constant_foldable(node):
+        if isinstance(node, ast.expr) and is_expr_constant_foldable(node):
             setter(evaluate_constant_foldable(node))
 
 
-def expr_is_constant_foldable(node: ast.AST):
+def is_expr_constant_foldable(node: ast.AST) -> bool:
     # This deliberately doesn't work for nested expressions
 
-    if not isinstance(node, ast.expr):
-        return False
+    assert isinstance(node, ast.expr)
 
     if isinstance(node, (ast.Constant, ast.Name)):
         return False
 
     for field in node._fields:
         child = getattr(node, field)
+
+        # `ast.Slice` isn't a subclass of `ast.slice` in python 3.9
+        if isinstance(child, (ast.Slice, ast.slice, ast.comprehension)):
+            if not is_slice_or_comprehension_constant_foldable(child):
+                return False
+            continue
 
         if isinstance(child, ast.AST):
             if not is_constant_or_childless(child):
@@ -60,15 +65,39 @@ def expr_is_constant_foldable(node: ast.AST):
     return True
 
 
+def is_slice_or_comprehension_constant_foldable(
+    # `ast.Slice` isn't a subclass of `ast.slice` in python 3.9
+    node: Union[ast.Slice, ast.slice, ast.comprehension]
+) -> bool:
+
+    if isinstance(node, ast.comprehension):
+        return all(
+            is_constant_or_childless(child)
+            for child in (node.target, node.iter, *node.ifs)
+        )
+
+    if isinstance(node, ast.Slice):
+        return all(
+            child is None or is_constant_or_childless(child)
+            for child in (node.lower, node.upper, node.step)
+        )
+
+    if isinstance(node, ast.Index):
+        return is_constant_or_childless(node.value)
+
+    if isinstance(node, ast.ExtSlice):
+        return all(
+            is_slice_or_comprehension_constant_foldable(slice) for slice in node.dims
+        )
+
+    return False
+
+
 def is_constant_or_childless(node: ast.AST):
     return 0 == len(node._fields) or isinstance(node, ast.Constant)
 
 
-def evaluate_constant_foldable(node: ast.AST) -> Any:
-    # TODO: replace `ast.Constant(value=$value, kind="dusk")` with
-    # `ast.Name(id=$name, ctx=ast.Load())` and add
-    # `$name: $value` to the locals dict ($name is a fresh variable name)
-    # should probably try to clone the expression?
+def evaluate_constant_foldable(node: ast.expr) -> Any:
 
     var_counter = 0
 
@@ -87,27 +116,10 @@ def evaluate_constant_foldable(node: ast.AST) -> Any:
         ast.copy_location(var, node)
         return var
 
-    copy = type(node)()
-    ast.copy_location(copy, node)
-
-    for field in node._fields:
-        child = getattr(node, field)
-
+    copy = ast_copy(node)
+    for child, setter in post_order_mut_iter(copy):
         if is_dusk_constant(child):
-            child_copy = make_local_var_node(child)
-
-        elif isinstance(child, list):
-            child_copy = [
-                subchild
-                if not is_dusk_constant(subchild)
-                else make_local_var_node(subchild)
-                for subchild in child
-            ]
-
-        else:
-            child_copy = child
-
-        setattr(copy, field, child_copy)
+            setter(make_local_var_node(child))
 
     copy = ast.Expression(body=copy)
 
@@ -124,14 +136,14 @@ def is_dusk_constant(node: ast.AST):
     return isinstance(node, ast.Constant) and node.kind == DUSK_CONSTANT_KIND
 
 
-# possible strategy:
-# replace `CompileTimeConstant` `ast.Name` with `ast.Constant`
-# If a node only has `ast.Constant` children -> constant fold
-# for `ast.Constant` that have python objects, replace with `ast.Name`
-#     and put the value in the locals dict
-
-# TODO: how to do execution of `ast.Constant(..., kind="dusk")`?
-# -> adding local closures
+def ast_copy(node: Any):
+    if not isinstance(node, ast.AST):
+        return node
+    copy = type(node)(
+        **{field: ast_copy(getattr(node, field)) for field in node._fields}
+    )
+    ast.copy_location(copy, node)
+    return copy
 
 
 def post_order_mut_iter(

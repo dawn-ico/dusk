@@ -25,8 +25,15 @@ def merge_sirs(sirs: List[sir.SIR], filename: Optional[str] = None):
             filename = "<unknown>"
 
     stencils = [stencil for sir in sirs for stencil in sir.stencils]
-    # FIXME: globals
-    return ser.make_sir(filename, sir.GridType.Value("Unstructured"), stencils)
+    globals = sir.GlobalVariableMap()
+    for _sir in sirs:
+        globals.map.update(_sir.global_variables.map)
+    return ser.make_sir(
+        filename,
+        sir.GridType.Value("Unstructured"),
+        stencils,
+        global_variables=globals,
+    )
 
 
 def sir_to_cpp(

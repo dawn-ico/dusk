@@ -137,13 +137,18 @@ def is_dusk_constant(node: ast.AST):
 
 
 def ast_copy(node: Any):
-    if not isinstance(node, ast.AST):
-        return node
-    copy = type(node)(
-        **{field: ast_copy(getattr(node, field)) for field in node._fields}
-    )
-    ast.copy_location(copy, node)
-    return copy
+
+    if isinstance(node, ast.AST):
+        copy = type(node)(
+            **{field: ast_copy(getattr(node, field)) for field in node._fields}
+        )
+        ast.copy_location(copy, node)
+        return copy
+
+    if isinstance(node, list):
+        return [ast_copy(child) for child in node]
+
+    return node
 
 
 def post_order_mut_iter(

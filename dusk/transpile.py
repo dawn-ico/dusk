@@ -27,7 +27,8 @@ def merge_sirs(sirs: List[sir.SIR], filename: Optional[str] = None):
     stencils = [stencil for sir in sirs for stencil in sir.stencils]
     globals = sir.GlobalVariableMap()
     for _sir in sirs:
-        globals.map.update(_sir.global_variables.map)
+        for k in _sir.global_variables.map:
+            globals.map[k].double_value = _sir.global_variables.map[k].double_value
     return ser.make_sir(
         filename,
         sir.GridType.Value("Unstructured"),

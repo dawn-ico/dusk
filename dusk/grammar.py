@@ -2,7 +2,7 @@ from __future__ import annotations
 import typing as t
 from ast import *
 
-import dawn4py.serialization.SIR as sir
+import dawn4py.serialization.AST as ast_ser
 from dawn4py.serialization.utils import (
     make_stencil,
     make_field,
@@ -237,7 +237,7 @@ class Grammar:
 
         if name not in location_names:
             raise DuskSyntaxError(f"Invalid location type '{name}'!", name)
-        return sir.LocationType.Value(name)
+        return ast_ser.LocationType.Value(name)
 
     @transform(Capture(list).to("py_stmts"))
     def statements(self, py_stmts: t.List, in_stencil_root_scope: bool = False):
@@ -372,18 +372,18 @@ class Grammar:
     def vertical_loop(self, order, body, upper=None, lower=None, var: str = None):
 
         if lower is None:
-            lower_level, lower_offset = sir.Interval.Start, 0
+            lower_level, lower_offset = ast_ser.Interval.Start, 0
         else:
             lower_level, lower_offset = self.vertical_interval_bound(lower)
 
         if upper is None:
-            upper_level, upper_offset = sir.Interval.End, 0
+            upper_level, upper_offset = ast_ser.Interval.End, 0
         else:
             upper_level, upper_offset = self.vertical_interval_bound(upper)
 
         order_mapper = {
-            "levels_upward": sir.VerticalRegion.Forward,
-            "levels_downward": sir.VerticalRegion.Backward,
+            "levels_upward": ast_ser.VerticalRegion.Forward,
+            "levels_downward": ast_ser.VerticalRegion.Backward,
         }
         with self.ctx.vertical_region(var):
             return make_vertical_region_decl_stmt(
@@ -396,11 +396,11 @@ class Grammar:
     @transform(Capture(OneOf(Constant, UnaryOp)).to("bound"))
     def vertical_interval_bound(self, bound):
         if does_match(Constant(value=int, kind=None), bound):
-            return sir.Interval.Start, bound.value
+            return ast_ser.Interval.Start, bound.value
         elif does_match(
             UnaryOp(op=USub, operand=Constant(value=int, kind=None)), bound
         ):
-            return sir.Interval.End, -bound.operand.value
+            return ast_ser.Interval.End, -bound.operand.value
         else:
             raise DuskSyntaxError(
                 f"Unrecognized vertical intervals bound '{bound}'!", bound
@@ -460,7 +460,7 @@ class Grammar:
                 f"Unsupported constant '{value}' of type '{type(value)}'!", value
             )
 
-        _type = sir.BuiltinType.TypeID.Value(built_in_type_map[type(value)])
+        _type = ast_ser.BuiltinType.TypeID.Value(built_in_type_map[type(value)])
 
         if isinstance(value, bool):
             value = "true" if value else "false"
@@ -886,7 +886,7 @@ class Grammar:
                 "max": "-1.79769313486231571e+308",
             }
             init = make_literal_access_expr(
-                init_map[op], sir.BuiltinType.TypeID.Value("Double")
+                init_map[op], ast_ser.BuiltinType.TypeID.Value("Double")
             )
 
         op = op_map[op]

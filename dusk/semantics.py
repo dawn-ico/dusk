@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from itertools import chain
 from collections import namedtuple
 
-from dawn4py.serialization import SIR as sir
+from dawn4py.serialization import SIR as sir_ser
 
 from dusk.errors import DuskSyntaxError, DuskInternalError
 
@@ -32,13 +32,13 @@ class VerticalIterationVariable(Symbol):
 @dataclass
 class Field(Symbol):
     kind: ClassVar[SymbolKind] = SymbolKind.Field
-    sir: sir.Field
+    sir: sir_ser.Field
 
 
 @dataclass
 class IndexField(Symbol):
     kind: ClassVar[SymbolKind] = SymbolKind.IndexField
-    sir: sir.Field
+    sir: sir_ser.Field
 
 
 class Scope(Iterable[Symbol]):
@@ -109,7 +109,7 @@ class LocationHelper:
         return len(location_chain) <= 1
 
     @staticmethod
-    def get_field_dimension(field: sir.Field) -> LocationChain:
+    def get_field_dimension(field: sir_ser.Field) -> LocationChain:
         assert (
             field.field_dimensions.WhichOneof("horizontal_dimension")
             == "unstructured_horizontal_dimension"
@@ -188,7 +188,7 @@ class LocationHelper:
         self.in_reduction = False
 
     def is_valid_horizontal_index(
-        self, field: sir.Field, hindex: LocationChain = None
+        self, field: sir_ser.Field, hindex: LocationChain = None
     ) -> bool:
         raise NotImplementedError
 

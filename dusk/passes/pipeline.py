@@ -1,8 +1,7 @@
 import inspect
 import ast
 
-import dawn4py.serialization as ser
-import dawn4py.serialization.SIR as sir
+import dawn4py.serialization as dawn_ser
 
 from dusk.integration import StencilObject
 from dusk.grammar import Grammar
@@ -11,7 +10,7 @@ from dusk.passes.resolve_globals import resolve_globals
 from dusk.passes.constant_folder import constant_fold
 
 
-def stencil_object_to_sir(stencil_object: StencilObject) -> sir.Stencil:
+def stencil_object_to_sir(stencil_object: StencilObject) -> dawn_ser.SIR.Stencil:
 
     add_filename(stencil_object)
     add_pyast(stencil_object)
@@ -46,9 +45,9 @@ def add_sir(stencil_object: StencilObject) -> None:
     assert stencil_object.pyast is not None
 
     sir_stencil = Grammar().stencil(stencil_object.pyast)
-    stencil_object.sir_node = ser.make_sir(
+    stencil_object.sir_node = dawn_ser.make_sir(
         stencil_object.filename,
-        sir.GridType.Value("Unstructured"),
+        dawn_ser.AST.GridType.Value("Unstructured"),
         [sir_stencil],
         global_variables=stencil_object.globals,
     )

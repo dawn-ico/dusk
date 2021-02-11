@@ -2,7 +2,7 @@ from __future__ import annotations
 import typing as t
 from ast import *
 
-import dawn4py.serialization.SIR as sir
+import dawn4py.serialization as dawn_ser
 from dawn4py.serialization.utils import (
     make_stencil,
     make_field,
@@ -228,7 +228,7 @@ class Grammar:
 
         if name not in location_names:
             raise SyntaxError(f"Invalid location type '{name}'!", name)
-        return sir.LocationType.Value(name)
+        return dawn_ser.AST.LocationType.Value(name)
 
     @transform(Capture(list).to("py_stmts"))
     def statements(self, py_stmts: t.List, in_stencil_root_scope: bool = False):
@@ -366,11 +366,11 @@ class Grammar:
     @transform(Capture(OneOf(Constant, UnaryOp)).to("bound"))
     def vertical_interval_bound(self, bound):
         if does_match(Constant(value=int, kind=None), bound):
-            return sir.Interval.Start, bound.value
+            return dawn_ser.AST.Interval.Start, bound.value
         elif does_match(
             UnaryOp(op=USub, operand=Constant(value=int, kind=None)), bound
         ):
-            return sir.Interval.End, -bound.operand.value
+            return dawn_ser.AST.Interval.End, -bound.operand.value
         else:
             raise SyntaxError(
                 f"Unrecognized vertical intervals bound '{bound}'!", bound
@@ -435,7 +435,7 @@ class Grammar:
                 f"Unsupported constant '{value}' of type '{type(value)}'!", value
             )
 
-        _type = sir.BuiltinType.TypeID.Value(built_in_type_map[type(value)])
+        _type = dawn_ser.AST.BuiltinType.TypeID.Value(built_in_type_map[type(value)])
 
         if isinstance(value, bool):
             value = "true" if value else "false"
@@ -865,7 +865,7 @@ class Grammar:
                 "max": "-1.79769313486231571e+308",
             }
             init = make_literal_access_expr(
-                init_map[op], sir.BuiltinType.TypeID.Value("Double")
+                init_map[op], dawn_ser.AST.BuiltinType.TypeID.Value("Double")
             )
 
         op = op_map[op]

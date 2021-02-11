@@ -3,7 +3,7 @@ from typing import Any, Optional, Callable, List
 from importlib.util import spec_from_file_location, module_from_spec
 import ast
 
-import dawn4py.serialization.SIR as sir
+import dawn4py.serialization as dawn_ser
 
 
 class StencilObject:
@@ -11,8 +11,8 @@ class StencilObject:
     filename: str
     stencil_scope: Any
     pyast: Optional[ast.FunctionDef] = None
-    globals: Optional[sir.GlobalVariableMap]
-    sir_node: Optional[sir.SIR] = None
+    globals: Optional[dawn_ser.AST.GlobalVariableMap]
+    sir_node: Optional[dawn_ser.SIR.SIR] = None
 
     def __init__(self, callable: Callable, filename: str = "<unknown>"):
         self.callable = callable

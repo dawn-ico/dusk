@@ -1,7 +1,6 @@
 import ast
+import dawn4py.serialization as dawn_ser
 
-import dawn4py.serialization as ser
-import dawn4py.serialization.SIR as sir
 
 import dusk.script as script
 from dusk.integration import StencilObject
@@ -11,7 +10,7 @@ def resolve_globals(stencil_object: StencilObject) -> None:
 
     # TODO: check preconditions & postconditions
 
-    stencil_object.globals = sir.GlobalVariableMap()
+    stencil_object.globals = dawn_ser.AST.GlobalVariableMap()
 
     for node in ast.walk(stencil_object.pyast):
         if (
@@ -21,4 +20,4 @@ def resolve_globals(stencil_object: StencilObject) -> None:
         ):
             name = node.decl.name
             stencil_object.globals.map[name].double_value = 0
-            node.sir = ser.make_var_access_expr(name, is_external=True)
+            node.sir = dawn_ser.make_var_access_expr(name, is_external=True)

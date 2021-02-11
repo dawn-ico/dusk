@@ -5,8 +5,7 @@ import typing as t
 import enum
 import dataclasses
 
-import dawn4py.serialization.utils as ser
-import dawn4py.serialization.SIR as sir
+import dawn4py.serialization as dawn_ser
 
 from dusk.errors import SemanticError
 
@@ -58,8 +57,8 @@ class VerticalIterationDirection(enum.Enum):
             or self is VerticalIterationDirection.DOWNWARD
         )
         if self is VerticalIterationDirection.UPWARD:
-            return sir.VerticalRegion.LoopOrder.Value("Forward")
-        return sir.VerticalRegion.LoopOrder.Value("Backward")
+            return dawn_ser.AST.VerticalRegion.LoopOrder.Value("Forward")
+        return dawn_ser.AST.VerticalRegion.LoopOrder.Value("Backward")
 
 
 class VerticalIterationDomain:
@@ -73,10 +72,10 @@ class VerticalIterationDomain:
         self.start = start
         self.end = end
 
-    def to_sir(self) -> t.Optional[sir.Interval]:
+    def to_sir(self) -> t.Optional[dawn_ser.AST.Interval]:
 
-        sir_start = sir.Interval.SpecialLevel.Value("Start")
-        sir_end = sir.Interval.SpecialLevel.Value("End")
+        sir_start = dawn_ser.AST.Interval.SpecialLevel.Value("Start")
+        sir_end = dawn_ser.AST.Interval.SpecialLevel.Value("End")
 
         if self.start is None:
             lower_level, lower_offset = sir_start, 0
@@ -92,7 +91,7 @@ class VerticalIterationDomain:
         else:
             upper_level, upper_offset = sir_end, self.end
 
-        return ser.make_interval(
+        return dawn_ser.make_interval(
             lower_level=lower_level,
             lower_offset=lower_offset,
             upper_level=upper_level,
@@ -140,13 +139,14 @@ class HorizontalIterationDomain:
     def __init__(self, region: HorizontalRegion = None):
         self.region = region
 
-    def to_sir(self) -> t.Optional[sir.Interval]:
+    def to_sir(self) -> t.Optional[dawn_ser.AST.Interval]:
         if self.region is None:
             return None
 
         start, end = self.region
 
-        return ser.make_magic_num_interval(
+        # FIXME: should be `dawn_ser.make_magic_num_interval`
+        return dawn_ser.utils.make_magic_num_interval(
             lower_level=start.encoding,
             lower_offset=start.offset,
             upper_level=end.encoding,

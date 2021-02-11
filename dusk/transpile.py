@@ -3,8 +3,7 @@ from typing import Optional, List
 import io
 
 import dawn4py
-import dawn4py.serialization as ser
-import dawn4py.serialization.SIR as sir
+import dawn4py.serialization as dawn_ser
 
 import dusk.integration as integration
 from dusk.passes.pipeline import stencil_object_to_sir
@@ -16,7 +15,7 @@ backend_map = {
 default_backend = "ico-naive"
 
 
-def merge_sirs(sirs: List[sir.SIR], filename: Optional[str] = None):
+def merge_sirs(sirs: List[dawn_ser.SIR.SIR], filename: Optional[str] = None):
 
     if filename is None:
         if 0 < len(sirs):
@@ -25,20 +24,23 @@ def merge_sirs(sirs: List[sir.SIR], filename: Optional[str] = None):
             filename = "<unknown>"
 
     stencils = [stencil for sir in sirs for stencil in sir.stencils]
-    globals = sir.GlobalVariableMap()
+    globals = dawn_ser.AST.GlobalVariableMap()
     for _sir in sirs:
         for k in _sir.global_variables.map:
             globals.map[k].double_value = _sir.global_variables.map[k].double_value
-    return ser.make_sir(
+    return dawn_ser.make_sir(
         filename,
-        sir.GridType.Value("Unstructured"),
+        dawn_ser.AST.GridType.Value("Unstructured"),
         stencils,
         global_variables=globals,
     )
 
 
 def sir_to_cpp(
-    sir_node: sir.SIR, verbose: bool = False, groups: List = [], backend=default_backend
+    sir_node: dawn_ser.SIR.SIR,
+    verbose: bool = False,
+    groups: List = [],
+    backend=default_backend,
 ) -> str:
     if verbose:
         dawn4py.set_verbosity(dawn4py.LogLevel.All)
@@ -46,7 +48,7 @@ def sir_to_cpp(
     return dawn4py.compile(sir_node, groups=groups, backend=backend_map[backend])
 
 
-def validate(sir_node: sir.SIR) -> None:
+def validate(sir_node: dawn_ser.SIR.SIR) -> None:
     dawn4py._dawn4py.run_optimizer_sir(sir_node.SerializeToString())
 
 
@@ -69,6 +71,6 @@ def transpile(
     sir_node = merge_sirs(sir_nodes)
 
     if out_sir_file is not None:
-        out_sir_file.write(ser.to_json(sir_node))
+        out_sir_file.write(dawn_ser.to_json(sir_node))
     if out_gencode_file is not None:
         out_gencode_file.write(sir_to_cpp(sir_node, backend=backend, verbose=verbose))

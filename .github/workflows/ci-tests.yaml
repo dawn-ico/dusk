@@ -14,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Install llvm/clang dependencies of dawn4py
+      run: |
+        sudo apt-get install llvm-dev libclang-dev
     - uses: actions/checkout@v2
     - name: Set up Python 3.8
       uses: actions/setup-python@v2

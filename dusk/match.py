@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import typing
 from abc import ABC, abstractmethod
-from ast import AST, stmt, expr
+import itertools
 
-from dusk.errors import DuskSyntaxError
-from dusk.util import pprint_matcher as pprint
+from dusk.ir import concept, pyast
+from dusk.errors import ASTError
 
 
 __all__ = [
@@ -16,20 +17,27 @@ __all__ = [
     "Optional",
     "Capture",
     "FixedList",
+    "EmptyList",
     "BreakPoint",
-    "DuskSyntaxError",
+    "NoMatch",
+    "name",
 ]
 
 
 class Matcher(ABC):
     @abstractmethod
-    def match(self, ast, **kwargs) -> None:
+    def match(self, node, **kwargs) -> None:
         raise NotImplementedError
 
 
 class MatcherError(Exception):
     def __init__(self, text: str) -> None:
         self.text = text
+
+
+class NoMatch(ASTError):
+    # marker class
+    pass
 
 
 class FixedList(Matcher):
@@ -41,15 +49,16 @@ class FixedList(Matcher):
     def match(self, nodes, **kwargs):
 
         if not isinstance(nodes, list):
-            raise DuskSyntaxError(f"Expected a list, but got '{type(nodes)}'!", nodes)
+            raise NoMatch(f"Expected a list, but got '{type(nodes)}'!", nodes)
 
         if len(nodes) != len(self.matchers):
-            raise DuskSyntaxError(
-                f"Expected a list of length {len(self.matchers)}'!", nodes
-            )
+            raise NoMatch(f"Expected a list of length {len(self.matchers)}'!", nodes)
 
         for matcher, node in zip(self.matchers, nodes):
             match(matcher, node, **kwargs)
+
+
+EmptyList = FixedList()
 
 
 class Repeat(Matcher):
@@ -63,11 +72,11 @@ class Repeat(Matcher):
     def match(self, nodes, **kwargs) -> None:
 
         if not isinstance(nodes, list):
-            raise DuskSyntaxError(f"Expected a list, but got '{type(nodes)}'!", nodes)
+            raise NoMatch(f"Expected a list, but got '{type(nodes)}'!", nodes)
 
         elif isinstance(self.n, int):
             if len(nodes) != self.n:
-                raise DuskSyntaxError(
+                raise NoMatch(
                     f"Expected a list of length {self.n}, but got list of length {len(nodes)}!",
                     nodes,
                 )
@@ -101,11 +110,11 @@ class OneOf(Matcher):
                 match(matcher, node, **kwargs)
                 matched = True
                 break
-            except DuskSyntaxError:
+            except NoMatch:
                 pass
 
         if not matched:
-            raise DuskSyntaxError(f"Encountered unrecognized node '{node}'!", node)
+            raise NoMatch(f"Encountered unrecognized node '{node}'!", node)
 
 
 def Optional(matcher) -> Matcher:
@@ -152,18 +161,22 @@ class BreakPoint(Matcher):
 
     def match(self, node, **kwargs):
         if self.active:
-            from dusk.util import pprint_matcher as pprint
+            from dusk.util import pprint
 
             breakpoint()
 
         match(self.matcher, node, **kwargs)
 
 
+def name(id, ctx=pyast.Load) -> pyast.Name:
+    return pyast.Name(id=id, ctx=ctx)
+
+
 def match(matcher, node, **kwargs) -> None:
     # this should be probably more flexible than hardcoding all possibilities
     if isinstance(matcher, Matcher):
         matcher.match(node, **kwargs)
-    elif isinstance(matcher, AST):
+    elif isinstance(matcher, pyast.AST):
         match_ast(matcher, node, **kwargs)
     elif isinstance(matcher, type):
         match_type(matcher, node, **kwargs)
@@ -177,21 +190,24 @@ def does_match(matcher, node, **kwargs) -> bool:
     try:
         match(matcher, node, **kwargs)
         return True
-    except DuskSyntaxError:
+    except NoMatch:
         return False
 
 
-def match_ast(matcher: AST, node, **kwargs):
+def match_ast(matcher: pyast.AST, node, **kwargs):
     if not isinstance(node, type(matcher)):
-        raise DuskSyntaxError(
+        raise NoMatch(
             f"Expected node type '{type(matcher)}', but got '{type(node)}'!", node
         )
 
-    for field in matcher._fields:
+    assert concept.get_node_kind(matcher) == concept.NodeKind.STRUCT
+    for field in concept.get_struct_fields(matcher):
         try:
             match(getattr(matcher, field), getattr(node, field), **kwargs)
-        except DuskSyntaxError as e:
-            if e.loc is None and isinstance(node, (stmt, expr)):
+        except NoMatch as e:
+            # FIXME: at some point all ast nodes will have location info
+            # so we can improve this
+            if e.loc is None and isinstance(node, (pyast.stmt, pyast.expr)):
                 # add location info if possible
                 e.loc_from_node(node)
             raise e
@@ -199,9 +215,7 @@ def match_ast(matcher: AST, node, **kwargs):
 
 def match_type(matcher: type, node, **kwargs):
     if not isinstance(node, matcher):
-        raise DuskSyntaxError(
-            f"Expected type '{matcher}', but got '{type(node)}'", node
-        )
+        raise NoMatch(f"Expected type '{matcher}', but got '{type(node)}'", node)
 
 
 PRIMITIVES = (str, int, type(None))
@@ -209,4 +223,19 @@ PRIMITIVES = (str, int, type(None))
 
 def match_primitives(matcher, node, **kwargs):
     if matcher != node:
-        raise DuskSyntaxError(f"Expected '{matcher}', but got '{node}'!", node)
+        raise NoMatch(f"Expected '{matcher}', but got '{node}'!", node)
+
+
+@concept.get_node_kind.register
+def get_matcher_kind(matcher: Matcher) -> concept.NodeKind:
+    return concept.NodeKind.STRUCT
+
+
+@concept.get_struct_fields.register
+def get_matcher_fields(matcher: Matcher) -> typing.Iterable[str]:
+    return matcher._fields
+
+
+@concept.get_struct_field_types.register
+def get_matcher_field_types(matcher: Matcher) -> typing.Dict[str, typing.Type]:
+    return dict(zip(concept.get_struct_fields(matcher), itertools.repeat(typing.Any)))

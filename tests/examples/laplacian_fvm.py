@@ -17,7 +17,7 @@ def laplacian_fvm(
     nabla2t1_vec: Field[Edge, K]
     nabla2t2_vec: Field[Edge, K]
 
-    with levels_upward:
+    with domain.upward:
 
         # compute curl (on vertices)
         rot_vec = sum_over(Vertex > Edge, vec * geofac_rot)

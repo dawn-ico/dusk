@@ -1,15 +1,9 @@
 from dusk.script import *
-from dusk.transpile import callable_to_pyast, pyast_to_sir, validate
+from dusk.test import stencil_test
 
 
-def test_reduce():
-    validate(pyast_to_sir(callable_to_pyast(various_reductions)))
-    validate(pyast_to_sir(callable_to_pyast(kw_args)))
-    validate(pyast_to_sir(callable_to_pyast(reductions_with_center)))
-
-
-@stencil
-def various_reductions(
+@stencil_test()
+def test_various_reductions(
     vertex: Field[Vertex],
     edge: Field[Edge, K],
     cell: Field[Cell, K],
@@ -23,7 +17,7 @@ def various_reductions(
     sparse2: Field[Cell > Edge > Cell > Edge > Cell > Edge],
     sparse3: Field[Cell > Vertex > Cell > Vertex > Cell > Edge],
 ):
-    with levels_upward:
+    with domain.upward:
         edge = sum_over(Edge > Cell, cell * ec)
 
         cell = max_over(Cell > Vertex, pow(vertex, cv / cell))
@@ -55,11 +49,11 @@ def various_reductions(
         )
 
 
-@stencil
-def kw_args(
+@stencil_test()
+def test_kw_args(
     a: Field[Edge], b: Field[Edge], c: Field[Edge > Cell], d: Field[Edge > Cell]
 ):
-    with levels_downward:
+    with domain.downward:
 
         # reductions without weights
         a = reduce_over(Edge > Cell, c * 3, sum, init=0.0)
@@ -83,9 +77,9 @@ def kw_args(
         a = max_over(Edge > Cell, d * 3, init=723, weights=[-1, 1])
 
 
-@stencil
-def reductions_with_center(
+@stencil_test()
+def test_reductions_with_center(
     a: Field[Edge], b: Field[Origin + Edge > Cell > Edge], c: Field[Edge]
 ):
-    with levels_downward:
+    with domain.downward:
         a = sum_over(Origin + Edge > Cell > Edge, b * c[Origin + Edge > Cell > Edge])

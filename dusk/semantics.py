@@ -1,15 +1,14 @@
 from __future__ import annotations
-from typing import NewType, Optional, ClassVar, Iterator, Iterable, List, Dict
+from typing import NewType, Optional, ClassVar, Iterator, List, Dict
 
 from enum import Enum, auto, unique
 from dataclasses import dataclass
 from contextlib import contextmanager
-from itertools import chain
 from collections import namedtuple
 
 from dawn4py.serialization import SIR as sir
 
-from dusk.errors import DuskSyntaxError, DuskInternalError
+from dusk.errors import SemanticError, SyntaxError
 
 
 @unique
@@ -41,11 +40,10 @@ class IndexField(Symbol):
     sir: sir.Field
 
 
-class Scope(Iterable[Symbol]):
+class Scope:
     symbols: Dict[str, Symbol]
     parent: Optional[Scope]
 
-    # TODO: better error messages
     def __init__(self, parent: Optional[Scope] = None) -> None:
         self.symbols = {}
         self.parent = parent
@@ -62,18 +60,16 @@ class Scope(Iterable[Symbol]):
             return self.symbols[name]
         if self.parent is not None:
             return self.parent.fetch(name)
-        raise KeyError
+        raise KeyError(f"Couldn't find symbol '{name}' in scope!")
 
     def add(self, name: str, symbol: Symbol) -> None:
         if self.contains(name):
-            raise KeyError
+            raise KeyError(f"Symbol '{name}' already exists in scope!")
 
         self.symbols[name] = symbol
 
-    def __iter__(self) -> Iterator[Symbol]:
-        if self.parent is None:
-            return iter(self.symbols.values())
-        return chain(iter(self.symbols.values()), self.parent)
+    def local_iter(self) -> Iterator[Symbol]:
+        return iter(self.symbols.values())
 
 
 class ScopeHelper:
@@ -140,9 +136,9 @@ class LocationHelper:
     @contextmanager
     def vertical_region(self):
         if self.in_vertical_region:
-            raise DuskSyntaxError("Vertical regions can't be nested!")
+            raise SemanticError("Vertical regions can't be nested!")
         if self.in_loop_stmt or self.in_reduction:
-            raise DuskSyntaxError(
+            raise SemanticError(
                 "Encountered vertical region inside reduction or loop statement!"
             )
         self.in_vertical_region = True
@@ -153,12 +149,12 @@ class LocationHelper:
     def _neighbor_iteration(self, location_chain: LocationChain, include_center: bool):
 
         if not self.in_vertical_region:
-            raise DuskSyntaxError(
+            raise SemanticError(
                 "Reductions or loop statements can only occur inside vertical regions!"
             )
 
         if len(location_chain) <= 1:
-            raise DuskSyntaxError(
+            raise SyntaxError(
                 "Reductions and loop statements must have a location chain of"
                 "length longer than 1!"
             )
@@ -171,9 +167,9 @@ class LocationHelper:
     def loop_stmt(self, location_chain: LocationChain, include_center: bool):
 
         if self.in_loop_stmt:
-            raise DuskSyntaxError("Nested loop statements aren't allowed!")
+            raise SemanticError("Nested loop statements aren't allowed!")
         if self.in_reduction:
-            raise DuskSyntaxError("Loop statements can't occur inside reductions!")
+            raise SemanticError("Loop statements can't occur inside reductions!")
 
         self.in_loop_stmt = True
         with self._neighbor_iteration(location_chain, include_center):

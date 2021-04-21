@@ -15,7 +15,7 @@ def interpolation_sph(
     wij: Field[Cell > Edge > Cell]
     qij: Field[Cell > Edge > Cell]
     Wn: Field[Cell]
-    with levels_upward:
+    with domain.upward:
         with sparse[Cell > Edge > Cell]:
             qij = (
                 sqrt(

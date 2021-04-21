@@ -1,8 +1,7 @@
 from __future__ import annotations
 import typing as t
-from ast import *
 
-import dawn4py.serialization.SIR as sir
+import dawn4py.serialization as dawn_ser
 from dawn4py.serialization.utils import (
     make_stencil,
     make_field,
@@ -30,17 +29,22 @@ from dawn4py.serialization.utils import (
     make_fun_call_expr,
 )
 
+from dusk.ir.pyast import *
 from dusk.match import (
     match,
     does_match,
+    NoMatch,
     Ignore as _,
     Optional,
     OneOf,
     Capture,
     Repeat,
     FixedList,
+    EmptyList,
+    name,
     BreakPoint,
 )
+from dusk.passes.constant_folder import DUSK_CONSTANT_KIND
 from dusk.semantics import (
     Symbol,
     SymbolKind,
@@ -49,30 +53,27 @@ from dusk.semantics import (
     VerticalIterationVariable,
     DuskContextHelper,
 )
-from dusk.script import stencil as stencil_decorator
+from dusk.script import internal
 from dusk.script.stubs import (
     LOCATION_TYPES,
     UNARY_MATH_FUNCTIONS,
     BINARY_MATH_FUNCTIONS,
 )
-from dusk.errors import DuskInternalError, DuskSyntaxError
-from dusk.util import pprint_matcher as pprint
+from dusk.errors import InternalError, SyntaxError, SemanticError
 
 
 # Short cuts
-EmptyList = FixedList()
 AnyContext = OneOf(Load, Store, Del, AugLoad, AugStore, Param)
-
-
-def name(id, ctx=Load) -> Name:
-    return Name(id=id, ctx=ctx)
 
 
 def transform(matcher) -> t.Callable:
     def decorator(transformer: t.Callable) -> t.Callable:
         def transformer_with_matcher(self, node, *args, **kwargs):
             captures = {}
-            match(matcher, node, capturer=captures)
+            try:
+                match(matcher, node, capturer=captures)
+            except NoMatch as e:
+                raise SyntaxError(e.message, e.node, e.loc) from None
             return transformer(self, *args, **captures, **kwargs)
 
         return transformer_with_matcher
@@ -84,26 +85,15 @@ def dispatch(rules: t.Dict[t.Any, t.Callable], node):
     for recognizer, rule in rules.items():
         if does_match(recognizer, node):
             return rule(node)
-    raise DuskSyntaxError(f"Unrecognized node: '{node}'!", node)
+    raise SyntaxError(f"Unrecognized node: '{node}'!", node)
 
 
 class Grammar:
-    @staticmethod
-    def is_stencil(node) -> bool:
-        return does_match(
-            FunctionDef(
-                name=_,
-                args=_,
-                body=_,
-                decorator_list=FixedList(name(stencil_decorator.__name__)),
-                returns=_,
-                type_comment=_,
-            ),
-            node,
-        )
-
     def __init__(self):
         self.ctx = DuskContextHelper()
+
+    # TODO: somewhere we should check that the function is a valid stencil
+    # e.g., no kwargs etc, mostly `Grammar.stencil` without capturing/processing
 
     @transform(
         FunctionDef(
@@ -118,19 +108,19 @@ class Grammar:
                 defaults=EmptyList,
             ),
             body=Capture(_).to("body"),
-            decorator_list=FixedList(name(stencil_decorator.__name__)),
+            decorator_list=_,
             returns=Optional(Constant(value=None, kind=None)),
             type_comment=None,
         )
     )
     def stencil(self, name: str, body: t.List, fields: t.List):
-        with self.ctx.scope.new_scope():
+        with self.ctx.scope.new_scope() as stencil_scope:
             for field in fields:
                 self.field_declaration(field)
             body = make_ast(self.statements(body, in_stencil_root_scope=True))
             fields = [
                 symbol.sir
-                for symbol in self.ctx.scope.current_scope
+                for symbol in stencil_scope.local_iter()
                 if isinstance(symbol, (DuskField, DuskIndexField))
             ]
         return make_stencil(name, body, fields)
@@ -226,7 +216,7 @@ class Grammar:
         locations = [self.location_type(location) for location in locations]
 
         if does_include_center and not self.ctx.location.is_ambiguous(locations):
-            raise DuskSyntaxError(
+            raise SyntaxError(
                 f"including the center is only allowed if start equals end location of the neighbor chain!"
             )
         return does_include_center, locations
@@ -236,8 +226,8 @@ class Grammar:
         location_names = {l.__name__ for l in LOCATION_TYPES}
 
         if name not in location_names:
-            raise DuskSyntaxError(f"Invalid location type '{name}'!", name)
-        return sir.LocationType.Value(name)
+            raise SyntaxError(f"Invalid location type '{name}'!", name)
+        return dawn_ser.AST.LocationType.Value(name)
 
     @transform(Capture(list).to("py_stmts"))
     def statements(self, py_stmts: t.List, in_stencil_root_scope: bool = False):
@@ -318,7 +308,7 @@ class Grammar:
             op = py_assign_op_to_sir_assign_op[type(op)]
 
         else:
-            raise DuskSyntaxError(f"Unsupported assignment operator '{op}'!", op)
+            raise SyntaxError(f"Unsupported assignment operator '{op}'!", op)
 
         return make_assignment_stmt(self.expression(lhs), self.expression(rhs), op)
 
@@ -342,25 +332,9 @@ class Grammar:
             items=FixedList(
                 # TODO: hardcoded strings
                 withitem(
-                    context_expr=OneOf(
-                        name(
-                            Capture(OneOf("levels_upward", "levels_downward")).to(
-                                "order"
-                            ),
-                        ),
-                        Subscript(
-                            value=name(
-                                id=Capture(
-                                    OneOf("levels_upward", "levels_downward")
-                                ).to("order")
-                            ),
-                            slice=Slice(
-                                lower=Capture(_).to("lower"),
-                                upper=Capture(_).to("upper"),
-                                step=None,
-                            ),
-                            ctx=Load,
-                        ),
+                    context_expr=Constant(
+                        value=Capture(internal.Domain).to("domain"),
+                        kind=DUSK_CONSTANT_KIND,
                     ),
                     optional_vars=Optional(name(Capture(str).to("var"), ctx=Store)),
                 ),
@@ -369,47 +343,39 @@ class Grammar:
             type_comment=None,
         ),
     )
-    def vertical_loop(self, order, body, upper=None, lower=None, var: str = None):
+    def vertical_loop(self, domain: internal.Domain, body, var: str = None):
 
-        if lower is None:
-            lower_level, lower_offset = sir.Interval.Start, 0
-        else:
-            lower_level, lower_offset = self.vertical_interval_bound(lower)
+        # FIXME: gracefully handle if the domain can't be constant folded
 
-        if upper is None:
-            upper_level, upper_offset = sir.Interval.End, 0
-        else:
-            upper_level, upper_offset = self.vertical_interval_bound(upper)
+        if not domain.valid():
+            raise SemanticError("Invalid domain!")
 
-        order_mapper = {
-            "levels_upward": sir.VerticalRegion.Forward,
-            "levels_downward": sir.VerticalRegion.Backward,
-        }
         with self.ctx.vertical_region(var):
             return make_vertical_region_decl_stmt(
-                make_ast(self.statements(body)),
-                make_interval(lower_level, upper_level, lower_offset, upper_offset),
-                order_mapper[order],
+                ast=make_ast(self.statements(body)),
+                interval=domain.vertical_domain.to_sir(),
+                loop_order=domain.vertical_direction.to_sir(),
+                IRange=domain.horizontal_domain.to_sir(),
             )
 
     # TODO: richer vertical interval bounds
     @transform(Capture(OneOf(Constant, UnaryOp)).to("bound"))
     def vertical_interval_bound(self, bound):
         if does_match(Constant(value=int, kind=None), bound):
-            return sir.Interval.Start, bound.value
+            return dawn_ser.AST.Interval.Start, bound.value
         elif does_match(
             UnaryOp(op=USub, operand=Constant(value=int, kind=None)), bound
         ):
-            return sir.Interval.End, -bound.operand.value
+            return dawn_ser.AST.Interval.End, -bound.operand.value
         else:
-            raise DuskSyntaxError(
+            raise SyntaxError(
                 f"Unrecognized vertical intervals bound '{bound}'!", bound
             )
 
     @transform(
         With(
             items=FixedList(
-                # TODO: bad hardcoded string `neighbors`
+                # TODO: bad hardcoded string `sparse`
                 withitem(
                     context_expr=Subscript(
                         value=name(id="sparse"),
@@ -431,12 +397,12 @@ class Grammar:
 
         return make_loop_stmt(body, neighborhood, include_center)
 
-    @transform(Capture(expr).to("expr"))
-    def expression(self, expr: expr):
+    @transform(Capture(OneOf(bool, int, float, expr)).to("expr"))
+    def expression(self, expr: t.Union[bool, int, float, expr]):
         return make_expr(
             dispatch(
                 {
-                    Constant: self.constant,
+                    OneOf(bool, int, float, Constant): self.constant,
                     Name: self.var,
                     Subscript: self.subscript,
                     UnaryOp: self.unop,
@@ -450,17 +416,22 @@ class Grammar:
             )
         )
 
-    @transform(Constant(value=Capture(_).to("value"), kind=None))
-    def constant(self, value):
+    @transform(
+        OneOf(
+            Constant(value=Capture(_).to("value"), kind=Optional(str)),
+            Capture(OneOf(bool, int, float)).to("value"),
+        )
+    )
+    def constant(self, value: Any):
         # TODO: properly distinguish between float and double
         built_in_type_map = {bool: "Boolean", int: "Integer", float: "Double"}
 
         if type(value) not in built_in_type_map.keys():
-            raise DuskSyntaxError(
+            raise SyntaxError(
                 f"Unsupported constant '{value}' of type '{type(value)}'!", value
             )
 
-        _type = sir.BuiltinType.TypeID.Value(built_in_type_map[type(value)])
+        _type = dawn_ser.AST.BuiltinType.TypeID.Value(built_in_type_map[type(value)])
 
         if isinstance(value, bool):
             value = "true" if value else "false"
@@ -473,17 +444,21 @@ class Grammar:
             _type,
         )
 
-    @transform(Name(id=Capture(str).to("name"), ctx=AnyContext))
-    def var(self, name: str, index: expr = None):
+    @transform(Capture(Name(id=Capture(str).to("name"), ctx=AnyContext)).to("node"))
+    def var(self, node: Name, name: str, index: expr = None):
+
+        if hasattr(node, "sir"):
+            # FIXME: remove once symbol resolution has been properly unified
+            return node.sir
 
         if not self.ctx.scope.current_scope.contains(name):
-            raise DuskSyntaxError(f"Undeclared variable '{name}'!", name)
+            raise SemanticError(f"Undeclared variable '{name}'!", name)
 
         symbol = self.ctx.scope.current_scope.fetch(name)
         if isinstance(symbol, DuskField):
             return self.field_access_expr(symbol, index)
         else:
-            raise DuskInternalError(
+            raise InternalError(
                 f"Encountered unknown symbol type '{symbol}' ('{name}')!"
             )
 
@@ -499,7 +474,7 @@ class Grammar:
 
     def field_access_expr(self, field: DuskField, index: expr = None):
         if not self.ctx.location.in_vertical_region:
-            raise DuskSyntaxError(
+            raise SemanticError(
                 f"Invalid field access {name} outside of a vertical region!"
             )
         return make_unstructured_field_access_expr(
@@ -533,7 +508,7 @@ class Grammar:
 
         if not self.ctx.location.in_neighbor_iteration:
             if hindex is not None:
-                raise DuskSyntaxError(
+                raise SemanticError(
                     f"Invalid horizontal index for field '{field.sir.name}' "
                     "outside of neighbor iteration!"
                 )
@@ -555,7 +530,7 @@ class Grammar:
         if hindex is None:
             if self.ctx.location.is_dense(field_dimension):
                 if self.ctx.location.is_ambiguous(neighbor_chain):
-                    raise DuskSyntaxError(
+                    raise SemanticError(
                         f"Field '{field.sir.name}' requires a horizontal index "
                         "inside of ambiguous neighbor iteration!"
                     )
@@ -574,20 +549,20 @@ class Grammar:
             self.ctx.location.current_neighbor_iteration.include_center
             != include_center
         ):
-            raise DuskSyntaxError(
+            raise SemanticError(
                 f"Invalid horizontal offset for field '{field.sir.name}'! "
                 "inconsistent center inclusion"
             )
 
         if len(hindex) == 1:
             if neighbor_chain[0] != hindex[0]:
-                raise DuskSyntaxError(
+                raise SemanticError(
                     f"Invalid horizontal offset for field '{field.sir.name}'!"
                 )
             return make_unstructured_offset(False), voffset, vbase
 
         if hindex != neighbor_chain:
-            raise DuskSyntaxError(
+            raise SemanticError(
                 f"Invalid horizontal offset for field '{field.sir.name}'!"
             )
 
@@ -607,7 +582,7 @@ class Grammar:
         base = self.ctx.scope.current_scope.fetch(base)
 
         if not isinstance(base, (VerticalIterationVariable, DuskIndexField)):
-            raise DuskSyntaxError(
+            raise SemanticError(
                 f"'{base}' isn't a vertical iteration variable or index field!", base
             )
         if isinstance(base, DuskIndexField):
@@ -621,7 +596,7 @@ class Grammar:
                     self.ctx.location.current_neighbor_iteration
                 )
             ):
-                raise DuskSyntaxError(
+                raise SemanticError(
                     f"Index field {base} used in ambiguous neighbor iteration!"
                 )
         elif isinstance(base, VerticalIterationVariable):
@@ -674,7 +649,7 @@ class Grammar:
             )
 
         else:
-            raise DuskSyntaxError(f"Unsupported binary operator '{op}'!", op)
+            raise SyntaxError(f"Unsupported binary operator '{op}'!", op)
 
     @transform(
         BoolOp(
@@ -713,7 +688,7 @@ class Grammar:
             GtE: ">=",
         }
         if type(op) not in py_compare_to_sir_compare.keys():
-            raise DuskSyntaxError(f"Unsupported comparison operator '{op}'!", op)
+            raise SyntaxError(f"Unsupported comparison operator '{op}'!", op)
         op = py_compare_to_sir_compare[type(op)]
         return make_binary_operator(self.expression(left), op, self.expression(right))
 
@@ -752,7 +727,7 @@ class Grammar:
         if name in self.unary_math_functions or name in self.binary_math_functions:
             return self.math_function(node)
 
-        raise DuskSyntaxError(f"Unrecognized function call '{name}'!", node)
+        raise SemanticError(f"Unrecognized function call '{name}'!", node)
 
     unary_math_functions = {f.__name__ for f in UNARY_MATH_FUNCTIONS}
     binary_math_functions = {f.__name__ for f in BINARY_MATH_FUNCTIONS}
@@ -768,7 +743,7 @@ class Grammar:
 
         if name in self.unary_math_functions:
             if len(args) != 1:
-                raise DuskSyntaxError(f"Function '{name}' takes exactly one argument!")
+                raise SemanticError(f"Function '{name}' takes exactly one argument!")
 
             if name == "abs":
                 name = "fabs"
@@ -779,13 +754,13 @@ class Grammar:
 
         if name in self.binary_math_functions:
             if len(args) != 2:
-                raise DuskSyntaxError(f"Function '{name}' takes exactly two arguments!")
+                raise SemanticError(f"Function '{name}' takes exactly two arguments!")
             return make_fun_call_expr(
                 f"gridtools::dawn::math::{name}",
                 [self.expression(arg) for arg in args],
             )
 
-        raise DuskSyntaxError(f"Unrecognized function call '{name}'!")
+        raise InternalError(f"Unrecognized function call '{name}'!")
 
     @transform(
         Call(
@@ -859,7 +834,7 @@ class Grammar:
         # TODO: what about these hard coded strings?
         wrong_kwargs = kwargs.keys() - {"init", "weights"}
         if 0 < len(wrong_kwargs):
-            raise DuskSyntaxError(f"Unsupported kwargs '{wrong_kwargs}' in reduction!")
+            raise SemanticError(f"Unsupported kwargs '{wrong_kwargs}' in reduction!")
 
         include_center, neighborhood = self.location_chain(neighborhood)
         with self.ctx.location.reduction(neighborhood, include_center):
@@ -867,7 +842,7 @@ class Grammar:
 
         op_map = {"sum": "+", "mul": "*", "min": "min", "max": "max"}
         if not op in op_map:
-            raise DuskSyntaxError(f"Invalid operator '{op}' for reduction!")
+            raise SemanticError(f"Invalid operator '{op}' for reduction!")
 
         if "init" in kwargs:
             init = self.expression(kwargs["init"])
@@ -886,16 +861,24 @@ class Grammar:
                 "max": "-1.79769313486231571e+308",
             }
             init = make_literal_access_expr(
-                init_map[op], sir.BuiltinType.TypeID.Value("Double")
+                init_map[op], dawn_ser.AST.BuiltinType.TypeID.Value("Double")
             )
 
         op = op_map[op]
 
         weights = None
         if "weights" in kwargs:
-            # TODO: check for `kwargs["weight"].ctx == Load`?
-            weights = [self.expression(weight) for weight in kwargs["weights"].elts]
+            weights = self.list_of_expressions(kwargs["weights"])
 
         return make_reduction_over_neighbor_expr(
             op, expr, init, neighborhood, weights, include_center
         )
+
+    @transform(
+        OneOf(
+            List(elts=Capture(list).to("exprs"), ctx=AnyContext),
+            Constant(value=Capture(list).to("exprs"), kind=DUSK_CONSTANT_KIND),
+        )
+    )
+    def list_of_expressions(self, exprs: list):
+        return [self.expression(expr) for expr in exprs]

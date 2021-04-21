@@ -1,4 +1,7 @@
 import typing
+
+import dusk.integration as integration
+
 from dusk.script import internal
 
 from dusk.script.math import *
@@ -6,6 +9,7 @@ from dusk.script.math import __all__ as __math_all__
 
 __all__ = [
     "stencil",
+    "Global",
     "Edge",
     "Cell",
     "Vertex",
@@ -13,8 +17,8 @@ __all__ = [
     "K",
     "Field",
     "IndexField",
-    "levels_upward",
-    "levels_downward",
+    "domain",
+    "HorizontalDomains",
     "sparse",
     "reduce_over",
     "mul",
@@ -25,7 +29,15 @@ __all__ = [
 
 
 def stencil(stencil: typing.Callable) -> typing.Callable:
+    integration.stencil_collection.append(integration.StencilObject(stencil))
     return stencil
+
+
+class Global:
+    name: str
+
+    def __init__(self, name: str):
+        self.name = name
 
 
 class Edge(metaclass=internal.LocationType):
@@ -60,8 +72,11 @@ class IndexField:
         pass
 
 
-levels_upward = internal.VerticalRegion()
-levels_downward = internal.VerticalRegion()
+domain = internal.Domain()
+
+
+def HorizontalDomains(*markers) -> typing.Iterable:
+    return map(internal.HorizontalMarker, markers)
 
 
 sparse = internal.SparseFill()

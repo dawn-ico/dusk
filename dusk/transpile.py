@@ -1,96 +1,76 @@
-from typing import Optional, Callable, List
-from inspect import getsource
+from typing import Optional, List
 
-from functools import reduce
-from operator import add
-import ast
-from io import TextIOBase
+import io
 
-from dusk.grammar import Grammar
+import dawn4py
+import dawn4py.serialization as dawn_ser
 
-from dawn4py import compile, CodeGenBackend, set_verbosity, LogLevel
-from dawn4py.serialization import make_sir, to_json as sir_to_json
-from dawn4py.serialization.SIR import GridType, SIR
-from dawn4py._dawn4py import run_optimizer_sir
-
+import dusk.integration as integration
+from dusk.passes.pipeline import stencil_object_to_sir
 
 backend_map = {
-    "ico-naive": CodeGenBackend.CXXNaiveIco,
-    "ico-cuda": CodeGenBackend.CUDAIco,
+    "ico-naive": dawn4py.CodeGenBackend.CXXNaiveIco,
+    "ico-cuda": dawn4py.CodeGenBackend.CUDAIco,
 }
 default_backend = "ico-naive"
 
 
-def str_to_pyast(source: str, filename: str = "<unknown>") -> List[ast.FunctionDef]:
-    source_ast = ast.parse(source, filename=filename, type_comments=True)
-    assert isinstance(source_ast, ast.Module)
-    return [
-        stencil_ast
-        for stencil_ast in source_ast.body
-        if isinstance(stencil_ast, ast.FunctionDef) and Grammar.is_stencil(stencil_ast)
-    ]
+def merge_sirs(sirs: List[dawn_ser.SIR.SIR], filename: Optional[str] = None):
 
+    if filename is None:
+        if 0 < len(sirs):
+            filename = sirs[0].filename
+        else:
+            filename = "<unknown>"
 
-def callable_to_pyast(
-    stencil: Callable, filename: str = "<unknown>"
-) -> List[ast.FunctionDef]:
-    # TODO: this will give wrong line numbers, there should be a way to fix them
-    source = getsource(stencil)
-    stencil_ast = ast.parse(source, filename=filename, type_comments=True)
-    assert isinstance(stencil_ast, ast.Module)
-    assert len(stencil_ast.body) == 1
-    assert Grammar.is_stencil(stencil_ast.body[0])
-    return [stencil_ast.body[0]]
-
-
-def callables_to_pyast(
-    stencils: List[Callable], filename: str = "<unknown>"
-) -> List[ast.FunctionDef]:
-    return reduce(
-        add, (callable_to_pyast(stencil, filename=filename) for stencil in stencils)
+    stencils = [stencil for sir in sirs for stencil in sir.stencils]
+    globals = dawn_ser.AST.GlobalVariableMap()
+    for _sir in sirs:
+        for k in _sir.global_variables.map:
+            globals.map[k].double_value = _sir.global_variables.map[k].double_value
+    return dawn_ser.make_sir(
+        filename,
+        dawn_ser.AST.GridType.Value("Unstructured"),
+        stencils,
+        global_variables=globals,
     )
 
 
-def pyast_to_sir(stencils: List[ast.FunctionDef], filename: str = "<unknown>") -> SIR:
-
-    grammar = Grammar()
-    # TODO: should probably throw instead
-    assert all(grammar.is_stencil(stencil) for stencil in stencils)
-
-    # TODO: handle errors in different stencils separately
-    stencils = [grammar.stencil(stencil) for stencil in stencils]
-
-    return make_sir(filename, GridType.Value("Unstructured"), stencils)
-
-
 def sir_to_cpp(
-    sir: SIR, verbose: bool = False, groups: List = [], backend=default_backend
+    sir_node: dawn_ser.SIR.SIR,
+    verbose: bool = False,
+    groups: List = [],
+    backend=default_backend,
 ) -> str:
     if verbose:
-        set_verbosity(LogLevel.All)
+        dawn4py.set_verbosity(dawn4py.LogLevel.All)
     # TODO: default pass groups are bugged in Dawn, need to pass empty list of groups
-    return compile(sir, groups=groups, backend=backend_map[backend])
+    return dawn4py.compile(sir_node, groups=groups, backend=backend_map[backend])
 
 
-def validate(sir: SIR) -> None:
-    run_optimizer_sir(sir.SerializeToString())
+def validate(sir_node: dawn_ser.SIR.SIR) -> None:
+    dawn4py._dawn4py.run_optimizer_sir(sir_node.SerializeToString())
 
 
 def transpile(
     in_path: str,
-    out_sir_file: Optional[TextIOBase],
-    out_gencode_file: Optional[TextIOBase],
+    out_sir_file: Optional[io.TextIOBase] = None,
+    out_gencode_file: Optional[io.TextIOBase] = None,
     backend: str = default_backend,
     verbose: bool = False,
 ) -> None:
 
-    with open(in_path, "r") as in_file:
-        in_str = in_file.read()
+    assert 0 == len(integration.stencil_collection)
 
-    pyast = str_to_pyast(in_str, filename=in_path)
-    sir = pyast_to_sir(pyast, filename=in_path)
+    integration.import_stencil_file(in_path)
+
+    sir_nodes = [
+        stencil_object_to_sir(stencil_object)
+        for stencil_object in integration.stencil_collection
+    ]
+    sir_node = merge_sirs(sir_nodes)
 
     if out_sir_file is not None:
-        out_sir_file.write(sir_to_json(sir))
+        out_sir_file.write(dawn_ser.to_json(sir_node))
     if out_gencode_file is not None:
-        out_gencode_file.write(sir_to_cpp(sir, backend=backend, verbose=verbose))
+        out_gencode_file.write(sir_to_cpp(sir_node, backend=backend, verbose=verbose))

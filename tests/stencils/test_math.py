@@ -1,15 +1,11 @@
 from dusk.script import *
-from dusk.transpile import callable_to_pyast, pyast_to_sir, validate
+from dusk.test import stencil_test
 
 
-def test_math():
-    validate(pyast_to_sir(callable_to_pyast(math_stencil)))
+@stencil_test()
+def test_math_stencil(a: Field[Cell], b: Field[Cell], c: Field[Cell], d: Field[Cell]):
 
-
-@stencil
-def math_stencil(a: Field[Cell], b: Field[Cell], c: Field[Cell], d: Field[Cell]):
-
-    with levels_upward:
+    with domain.upward:
 
         a = sqrt(b)
         b = exp(c)

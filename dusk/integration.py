@@ -1,25 +1,28 @@
-from typing import Any, Optional, Callable, List
+import typing
 
 from importlib.util import spec_from_file_location, module_from_spec
 import ast
 
 import dawn4py.serialization as dawn_ser
 
+from dusk.passes import tree
+
 
 class StencilObject:
-    callable: Callable
+    callable: typing.Callable
     filename: str
-    stencil_scope: Any
-    pyast: Optional[ast.FunctionDef] = None
-    globals: Optional[dawn_ser.AST.GlobalVariableMap]
-    sir_node: Optional[dawn_ser.SIR.SIR] = None
+    stencil_scope: typing.Any
+    tree_handle: typing.Optional[tree.TreeHandle]
+    pyast: typing.Optional[ast.FunctionDef] = None
+    globals: typing.Optional[dawn_ser.AST.GlobalVariableMap]
+    sir_node: typing.Optional[dawn_ser.SIR.SIR] = None
 
-    def __init__(self, callable: Callable, filename: str = "<unknown>"):
+    def __init__(self, callable: typing.Callable, filename: str = "<unknown>"):
         self.callable = callable
         self.filename = filename
 
 
-stencil_collection: List[StencilObject] = []
+stencil_collection: typing.List[StencilObject] = []
 
 
 def import_stencil_file(path: str) -> None:

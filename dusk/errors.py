@@ -5,10 +5,15 @@ from ast import AST, expr, stmt
 
 
 class InternalError(Exception):
-    def __init__(self, message):
+    def __init__(self, message=""):
         self.message = message
 
 
+class ValidationError(InternalError):
+    pass
+
+
+# FIXME: remove `errors.LocationInfo`
 class LocationInfo:
     def __init__(
         self, lineno: int, col_offset: int, end_lineno: int, end_col_offset: int

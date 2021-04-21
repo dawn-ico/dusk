@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import typing as t
-from types import CellType
+import typing
 
 import builtins
-from ast import *
+from dusk.ir.pyast import *
 
+# FIXME: move `grammar.transform` to a better place
 from dusk import grammar, errors
 from dusk.match import (
-    does_match,
     Ignore as _,
     Optional,
     Capture,
@@ -16,50 +15,49 @@ from dusk.match import (
     EmptyList,
     name,
 )
-from dusk.integration import StencilObject
+from dusk.ir import traversal
+from dusk.passes import tree
 
 
-def resolve_symbols(stencil_object: StencilObject) -> None:
-    SymbolResolver(stencil_object).resolve_symbols()
-
-
-class SymbolResolver:
+class SymbolResolver(tree.TreeTransformer[AST]):
 
     # TODO: check preconditions?
     # TODO: check postconditions?
 
-    stencil_object: StencilObject
-    externals: DictScope[t.Any]
-    api_fields: DictScope[t.Any]
-    temp_fields: DictScope[t.Any]
-    _current_scope: DictScope[t.Any]
+    externals: DictScope[typing.Any]
+    api_fields: DictScope[typing.Any]
+    temp_fields: DictScope[typing.Any]
+    _current_scope: DictScope[typing.Any]
 
-    def __init__(self, stencil_object: StencilObject):
-        self.stencil_object = stencil_object
+    def __init__(self, tree_handle: tree.TreeHandle[AST]):
+        super().__init__(tree_handle)
 
-        _builtins: DictScope[t.Any] = DictScope(
+        _builtins: DictScope[typing.Any] = DictScope(
             symbols=builtins.__dict__,
             can_add_symbols=False,
             allow_shadowing=True,
             parent=None,
         )
-        globals: DictScope[t.Any] = DictScope(
-            symbols=stencil_object.callable.__globals__,
+        globals: DictScope[typing.Any] = DictScope(
+            symbols=tree_handle.annotations.callable.__globals__,
             can_add_symbols=False,
             allow_shadowing=True,
             parent=_builtins,
         )
         closure = {}
-        if stencil_object.callable.__closure__ is not None:
+        if tree_handle.annotations.callable.__closure__ is not None:
             # FIXME: add a test for a proper closure
             closure = dict(
                 zip(
-                    stencil_object.callable.__code__.co_freevars,
-                    (c.cell_contents for c in stencil_object.callable.__closure__),
+                    tree_handle.annotations.callable.__code__.co_freevars,
+                    (
+                        c.cell_contents
+                        for c in tree_handle.annotations.callable.__closure__
+                    ),
                 )
             )
 
-        self.externals: DictScope[t.Any] = DictScope(
+        self.externals = DictScope(
             symbols=closure,
             can_add_symbols=False,
             allow_shadowing=True,
@@ -69,10 +67,10 @@ class SymbolResolver:
         self.temp_fields = DictScope(parent=self.api_fields)
         self._current_scope = self.temp_fields
 
-        stencil_object.stencil_scope = self.temp_fields
+        tree_handle.annotations.stencil_scope = self.temp_fields
 
-    def resolve_symbols(self):
-        self.stencil(self.stencil_object.pyast)
+    def transform_bare(self):
+        self.stencil(self.tree_handle.tree)
 
     @grammar.transform(
         FunctionDef(
@@ -92,7 +90,7 @@ class SymbolResolver:
             type_comment=None,
         )
     )
-    def stencil(self, api_fields: t.List[arg], body: t.List[stmt]):
+    def stencil(self, api_fields: typing.List[arg], body: typing.List[stmt]):
         for field in api_fields:
             self.api_field(field)
 
@@ -149,7 +147,7 @@ class SymbolResolver:
             type_comment=None,
         ),
     )
-    def vertical_loop(self, domain: expr, body: t.List, var: str = None):
+    def vertical_loop(self, domain: expr, body: typing.List, var: str = None):
         self.resolve_names(domain)
 
         # FIXME: should we add a context manager again?
@@ -159,15 +157,17 @@ class SymbolResolver:
         if var is not None:
             self._current_scope.try_add(var, domain)
 
-        for stmt in body:
-            self.resolve_names(stmt)
+        self.resolve_names(body)
 
         self._current_scope = previous_scope
 
-    def resolve_names(self, node: AST):
-        for child in walk(node):
+    def resolve_names(self, node: typing.Any):
+        for child in traversal.post_order(node):
             if not isinstance(child, Name):
+                # FIXME: should probably throw if there's other declarations here
                 continue
+
+            # FIXME: should probably throw if `not isinstance(node.ctx, pyast.Load)`
 
             name = child.id
 
@@ -176,23 +176,23 @@ class SymbolResolver:
             child.decl = self._current_scope.fetch(name)
 
 
-T = t.TypeVar("T")
+T = typing.TypeVar("T")
 
 
-class DictScope(t.Generic[T]):
+class DictScope(typing.Generic[T]):
 
-    symbols: t.Dict[str, T]
+    symbols: typing.Dict[str, T]
     can_add_symbols: bool
     # whether child scopes are allowed to shadow symbols from this scope
     allow_shadowing: bool
-    parent: t.Optional[DictScope[T]]
+    parent: typing.Optional[DictScope[T]]
 
     def __init__(
         self,
-        symbols: t.Optional[t.Dict[str, T]] = None,
+        symbols: typing.Optional[typing.Dict[str, T]] = None,
         can_add_symbols: bool = True,
         allow_shadowing: bool = False,
-        parent: t.Optional[DictScope[T]] = None,
+        parent: typing.Optional[DictScope[T]] = None,
     ):
         if symbols is None:
             symbols = {}
@@ -220,7 +220,7 @@ class DictScope(t.Generic[T]):
 
         if not self.can_add_symbols:
             raise KeyError(
-                f"This scope doesn't allow adding of symbols ('{name}', '{symbol}')!"
+                f"This scope doesn't allow adding symbols ('{name}', '{symbol}')!"
             )
 
         if name in self.symbols:
@@ -241,5 +241,5 @@ class DictScope(t.Generic[T]):
 
         self.symbols[name] = symbol
 
-    def local_iter(self) -> t.Iterator[T]:
+    def local_iter(self) -> typing.Iterator[T]:
         return iter(self.symbols.values())

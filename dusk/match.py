@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import typing
 from abc import ABC, abstractmethod
-import ast
+import itertools
 
+from dusk.ir import concept, pyast
 from dusk.errors import ASTError
-from dusk.util import pprint_matcher as pprint
 
 
 __all__ = [
@@ -25,7 +26,7 @@ __all__ = [
 
 class Matcher(ABC):
     @abstractmethod
-    def match(self, ast, **kwargs) -> None:
+    def match(self, node, **kwargs) -> None:
         raise NotImplementedError
 
 
@@ -160,22 +161,22 @@ class BreakPoint(Matcher):
 
     def match(self, node, **kwargs):
         if self.active:
-            from dusk.util import pprint_matcher as pprint
+            from dusk.util import pprint
 
             breakpoint()
 
         match(self.matcher, node, **kwargs)
 
 
-def name(id, ctx=ast.Load) -> ast.Name:
-    return ast.Name(id=id, ctx=ctx)
+def name(id, ctx=pyast.Load) -> pyast.Name:
+    return pyast.Name(id=id, ctx=ctx)
 
 
 def match(matcher, node, **kwargs) -> None:
     # this should be probably more flexible than hardcoding all possibilities
     if isinstance(matcher, Matcher):
         matcher.match(node, **kwargs)
-    elif isinstance(matcher, ast.AST):
+    elif isinstance(matcher, pyast.AST):
         match_ast(matcher, node, **kwargs)
     elif isinstance(matcher, type):
         match_type(matcher, node, **kwargs)
@@ -193,17 +194,20 @@ def does_match(matcher, node, **kwargs) -> bool:
         return False
 
 
-def match_ast(matcher: ast.AST, node, **kwargs):
+def match_ast(matcher: pyast.AST, node, **kwargs):
     if not isinstance(node, type(matcher)):
         raise NoMatch(
             f"Expected node type '{type(matcher)}', but got '{type(node)}'!", node
         )
 
-    for field in matcher._fields:
+    assert concept.get_node_kind(matcher) == concept.NodeKind.STRUCT
+    for field in concept.get_struct_fields(matcher):
         try:
             match(getattr(matcher, field), getattr(node, field), **kwargs)
         except NoMatch as e:
-            if e.loc is None and isinstance(node, (ast.stmt, ast.expr)):
+            # FIXME: at some point all ast nodes will have location info
+            # so we can improve this
+            if e.loc is None and isinstance(node, (pyast.stmt, pyast.expr)):
                 # add location info if possible
                 e.loc_from_node(node)
             raise e
@@ -220,3 +224,18 @@ PRIMITIVES = (str, int, type(None))
 def match_primitives(matcher, node, **kwargs):
     if matcher != node:
         raise NoMatch(f"Expected '{matcher}', but got '{node}'!", node)
+
+
+@concept.get_node_kind.register
+def get_matcher_kind(matcher: Matcher) -> concept.NodeKind:
+    return concept.NodeKind.STRUCT
+
+
+@concept.get_struct_fields.register
+def get_matcher_fields(matcher: Matcher) -> typing.Iterable[str]:
+    return matcher._fields
+
+
+@concept.get_struct_field_types.register
+def get_matcher_field_types(matcher: Matcher) -> typing.Dict[str, typing.Type]:
+    return dict(zip(concept.get_struct_fields(matcher), itertools.repeat(typing.Any)))

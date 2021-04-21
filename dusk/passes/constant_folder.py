@@ -2,58 +2,62 @@ from typing import Any, Union, Tuple, Optional, Callable, Iterator
 
 import ast
 
-from dusk import integration, errors
 from dusk.script import internal
+from dusk.ir import pyast, concept
+from dusk.passes import tree
 
 
 DUSK_CONSTANT_KIND = "__dusk_constant_kind__"
 
 
-def constant_fold(stencil_object: integration.StencilObject) -> None:
+class ConstantFolder(tree.TreeTransformer[pyast.AST]):
+    def transform_bare(self) -> None:
 
-    inline_compiletime_constants(stencil_object)
-    constant_fold_expr(stencil_object)
+        inline_compiletime_constants(self.tree_handle)
+        constant_fold_expr(self.tree_handle)
 
 
-def inline_compiletime_constants(stencil_object: integration.StencilObject) -> None:
+def inline_compiletime_constants(
+    tree_handle: tree.TreeHandle[pyast.AST],
+) -> None:
 
-    for node, setter in post_order_mut_iter(stencil_object.pyast.body):
+    for node, setter in post_order_mut_iter(tree_handle.tree.body):
         # FIXME: is this in invariant after symbol resolution?
         # or should we do `hasattr(node, "decl")` instead?
         if (
-            isinstance(node, ast.Name)
-            and isinstance(node.ctx, ast.Load)
+            isinstance(node, pyast.Name)
+            and isinstance(node.ctx, pyast.Load)
             and isinstance(node.decl, internal.CompileTimeConstant)
         ):
-            constant = ast.Constant(value=node.decl, kind=DUSK_CONSTANT_KIND)
+            constant = pyast.Constant(value=node.decl, kind=DUSK_CONSTANT_KIND)
             ast.copy_location(constant, node)
             setter(constant)
 
 
-def constant_fold_expr(stencil_object: integration.StencilObject) -> None:
-    for node, setter in post_order_mut_iter(stencil_object.pyast.body):
-        if isinstance(node, ast.expr) and is_expr_constant_foldable(node):
+def constant_fold_expr(tree_handle: tree.TreeHandle[pyast.AST]) -> None:
+    for node, setter in post_order_mut_iter(tree_handle.tree.body):
+        if isinstance(node, pyast.expr) and is_expr_constant_foldable(node):
             setter(evaluate_constant_foldable(node))
 
 
-def is_expr_constant_foldable(node: ast.AST) -> bool:
+def is_expr_constant_foldable(node: pyast.AST) -> bool:
     # This deliberately doesn't work for nested expressions
 
-    assert isinstance(node, ast.expr)
+    assert isinstance(node, pyast.expr)
 
-    if isinstance(node, (ast.Constant, ast.Name)):
+    if isinstance(node, (pyast.Constant, pyast.Name)):
         return False
 
-    for field in node._fields:
+    for field in concept.get_struct_fields(node):
         child = getattr(node, field)
 
-        # `ast.Slice` isn't a subclass of `ast.slice` in python 3.9
-        if isinstance(child, (ast.Slice, ast.slice, ast.comprehension)):
+        # `pyast.Slice` isn't a subclass of `pyast.slice` in python 3.9
+        if isinstance(child, (pyast.Slice, pyast.slice, pyast.comprehension)):
             if not is_slice_or_comprehension_constant_foldable(child):
                 return False
             continue
 
-        if isinstance(child, ast.AST):
+        if isinstance(child, pyast.AST):
             if not is_constant_or_childless(child):
                 return False
 
@@ -66,26 +70,26 @@ def is_expr_constant_foldable(node: ast.AST) -> bool:
 
 
 def is_slice_or_comprehension_constant_foldable(
-    # `ast.Slice` isn't a subclass of `ast.slice` in python 3.9
-    node: Union[ast.Slice, ast.slice, ast.comprehension]
+    # `pyast.Slice` isn't a subclass of `pyast.slice` in python 3.9
+    node: Union[pyast.Slice, pyast.slice, pyast.comprehension]
 ) -> bool:
 
-    if isinstance(node, ast.comprehension):
+    if isinstance(node, pyast.comprehension):
         return all(
             is_constant_or_childless(child)
             for child in (node.target, node.iter, *node.ifs)
         )
 
-    if isinstance(node, ast.Slice):
+    if isinstance(node, pyast.Slice):
         return all(
             child is None or is_constant_or_childless(child)
             for child in (node.lower, node.upper, node.step)
         )
 
-    if isinstance(node, ast.Index):
+    if isinstance(node, pyast.Index):
         return is_constant_or_childless(node.value)
 
-    if isinstance(node, ast.ExtSlice):
+    if isinstance(node, pyast.ExtSlice):
         return all(
             is_slice_or_comprehension_constant_foldable(slice) for slice in node.dims
         )
@@ -93,11 +97,13 @@ def is_slice_or_comprehension_constant_foldable(
     return False
 
 
-def is_constant_or_childless(node: ast.AST):
-    return 0 == len(node._fields) or isinstance(node, ast.Constant)
+def is_constant_or_childless(node: pyast.AST):
+    return 0 == len(list(concept.get_struct_fields(node))) or isinstance(
+        node, pyast.Constant
+    )
 
 
-def evaluate_constant_foldable(node: ast.expr) -> Any:
+def evaluate_constant_foldable(node: pyast.expr) -> Any:
 
     var_counter = 0
 
@@ -108,11 +114,11 @@ def evaluate_constant_foldable(node: ast.expr) -> Any:
 
     locals = {}
 
-    def make_local_var_node(node: ast.Constant):
+    def make_local_var_node(node: pyast.Constant):
         fresh_name = make_fresh_name()
         assert fresh_name not in locals
         locals[fresh_name] = node.value
-        var = ast.Name(id=fresh_name, ctx=ast.Load())
+        var = pyast.Name(id=fresh_name, ctx=pyast.Load())
         ast.copy_location(var, node)
         return var
 
@@ -121,26 +127,29 @@ def evaluate_constant_foldable(node: ast.expr) -> Any:
         if is_dusk_constant(child):
             setter(make_local_var_node(child))
 
-    copy = ast.Expression(body=copy)
+    copy = pyast.Expression(body=copy)
 
     # TODO: filename & location info?
     # TODO: handle exceptions?
     value = eval(compile(copy, mode="eval", filename="<unknown>"), {}, locals)
-    constant_node = ast.Constant(value=value, kind=DUSK_CONSTANT_KIND)
+    constant_node = pyast.Constant(value=value, kind=DUSK_CONSTANT_KIND)
     ast.copy_location(constant_node, node)
 
     return constant_node
 
 
-def is_dusk_constant(node: ast.AST):
-    return isinstance(node, ast.Constant) and node.kind == DUSK_CONSTANT_KIND
+def is_dusk_constant(node: pyast.AST):
+    return isinstance(node, pyast.Constant) and node.kind == DUSK_CONSTANT_KIND
 
 
 def ast_copy(node: Any):
 
-    if isinstance(node, ast.AST):
+    if isinstance(node, pyast.AST):
         copy = type(node)(
-            **{field: ast_copy(getattr(node, field)) for field in node._fields}
+            **{
+                field: ast_copy(getattr(node, field))
+                for field in concept.get_struct_fields(node)
+            }
         )
         ast.copy_location(copy, node)
         return copy
@@ -152,12 +161,15 @@ def ast_copy(node: Any):
 
 
 def post_order_mut_iter(
-    node: Union[ast.AST, list],
-    slot: Optional[Union[Tuple[ast.AST, str], Tuple[list, int]]] = None,
-) -> Iterator[Tuple[ast.AST, Any]]:
+    node: Union[pyast.AST, list],
+    slot: Optional[Union[Tuple[pyast.AST, str], Tuple[list, int]]] = None,
+) -> Iterator[Tuple[pyast.AST, Any]]:
+    # FIXME: `Any` above is unnecessarily impresice!
 
-    if isinstance(node, ast.AST):
-        for field in node._fields:
+    # FIXME: move into `dusk.ir.traversal`
+
+    if isinstance(node, pyast.AST):
+        for field in concept.get_struct_fields(node):
             yield from post_order_mut_iter(getattr(node, field), (node, field))
 
         if slot is not None:
@@ -169,14 +181,14 @@ def post_order_mut_iter(
 
 
 def make_setter(
-    slot: Union[Tuple[ast.AST, str], Tuple[list, int]]
-) -> Callable[[ast.AST], None]:
+    slot: Union[Tuple[pyast.AST, str], Tuple[list, int]]
+) -> Callable[[pyast.AST], None]:
     parent, entry = slot
 
-    def ast_setter(node: ast.AST) -> None:
+    def ast_setter(node: pyast.AST) -> None:
         setattr(parent, entry, node)
 
-    def list_setter(node: ast.AST) -> None:
+    def list_setter(node: pyast.AST) -> None:
         parent[entry] = node
 
-    return ast_setter if isinstance(parent, ast.AST) else list_setter
+    return ast_setter if isinstance(parent, pyast.AST) else list_setter

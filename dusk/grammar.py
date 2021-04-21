@@ -1,6 +1,5 @@
 from __future__ import annotations
 import typing as t
-from ast import *
 
 import dawn4py.serialization as dawn_ser
 from dawn4py.serialization.utils import (
@@ -30,6 +29,7 @@ from dawn4py.serialization.utils import (
     make_fun_call_expr,
 )
 
+from dusk.ir.pyast import *
 from dusk.match import (
     match,
     does_match,
@@ -60,7 +60,6 @@ from dusk.script.stubs import (
     BINARY_MATH_FUNCTIONS,
 )
 from dusk.errors import InternalError, SyntaxError, SemanticError
-from dusk.util import pprint_matcher as pprint
 
 
 # Short cuts
@@ -329,23 +328,20 @@ class Grammar:
         return make_if_stmt(condition, body, orelse)
 
     @transform(
-        BreakPoint(
-            With(
-                items=FixedList(
-                    # TODO: hardcoded strings
-                    withitem(
-                        context_expr=Constant(
-                            value=Capture(internal.Domain).to("domain"),
-                            kind=DUSK_CONSTANT_KIND,
-                        ),
-                        optional_vars=Optional(name(Capture(str).to("var"), ctx=Store)),
+        With(
+            items=FixedList(
+                # TODO: hardcoded strings
+                withitem(
+                    context_expr=Constant(
+                        value=Capture(internal.Domain).to("domain"),
+                        kind=DUSK_CONSTANT_KIND,
                     ),
+                    optional_vars=Optional(name(Capture(str).to("var"), ctx=Store)),
                 ),
-                body=Capture(_).to("body"),
-                type_comment=None,
             ),
-            active=False,
-        )
+            body=Capture(_).to("body"),
+            type_comment=None,
+        ),
     )
     def vertical_loop(self, domain: internal.Domain, body, var: str = None):
 

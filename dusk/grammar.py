@@ -517,7 +517,7 @@ class Grammar:
         field_dimension = self.ctx.location.get_field_dimension(field.sir)
 
         if hindex is not None and not self.ctx.location.is_dense(field_dimension):
-            raise DuskSyntaxError(
+            raise SemanticError(
                 f"Invalid horizontal offset for field '{field.sir.name}',"
                 "sparse fields do not take an offset (only non-offset read makes sense)!"
             )
